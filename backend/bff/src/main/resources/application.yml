@@ -1,0 +1,26 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: bff-gateway
+
+smartlogix:
+  inventario:
+    url: ${INVENTARIO_SERVICE_URL:http://localhost:8081}
+  pedidos:
+    url: ${PEDIDOS_SERVICE_URL:http://localhost:8082}
+  auth:
+    url: ${AUTH_SERVICE_URL:http://localhost:8083}
+
+# ─── PayPal ───────────────────────────────────────────────────────────────────
+paypal:
+  client-id: ${PAYPAL_CLIENT_ID:TU_CLIENT_ID_AQUI}
+  client-secret: ${PAYPAL_CLIENT_SECRET:TU_CLIENT_SECRET_AQUI}
+  mode: ${PAYPAL_MODE:sandbox}
+  return-url: ${PAYPAL_RETURN_URL:http://localhost:3000/pago/exito}
+  cancel-url: ${PAYPAL_CANCEL_URL:http://localhost:3000/pago/cancelado}
+
+logging:
+  level:
+    com.smartlogix.bff: DEBUG

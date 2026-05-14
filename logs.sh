@@ -1,0 +1,3 @@
+#!/bin/bash
+echo "Mostrando logs de SmartLogix (Ctrl+C para salir)..."
+docker compose logs -f

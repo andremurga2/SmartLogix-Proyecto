@@ -1,0 +1,15 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: ms-auth
+
+# ── JWT ──────────────────────────────────────────────────────────────────────
+jwt:
+  secret: ${JWT_SECRET:SmartLogix2026-SuperSecretKey-MustBe256BitsOrMoreForHS256}
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000}   # 24 horas
+
+logging:
+  level:
+    com.smartlogix.auth: DEBUG

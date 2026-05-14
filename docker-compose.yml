@@ -1,0 +1,174 @@
+services:
+
+  # ─── RABBITMQ — Event Bus ─────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: smartlogix-rabbitmq
+    ports:
+      - "5672:5672"       # AMQP
+      - "15672:15672"     # Management UI → http://localhost:15672 (guest/guest)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - smartlogix-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ─── BASE DE DATOS INVENTARIO ────────────────────────────────────────────────
+  db-inventario:
+    image: postgres:15-alpine
+    container_name: smartlogix-db-inventario
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin_password
+      POSTGRES_DB: db_inventario
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_inventario:/var/lib/postgresql/data
+    networks:
+      - smartlogix-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d db_inventario"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── BASE DE DATOS PEDIDOS ───────────────────────────────────────────────────
+  db-pedidos:
+    image: postgres:15-alpine
+    container_name: smartlogix-db-pedidos
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin_password
+      POSTGRES_DB: db_pedidos
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata_pedidos:/var/lib/postgresql/data
+    networks:
+      - smartlogix-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d db_pedidos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── MICROSERVICIO AUTH (JWT) ─────────────────────────────────────────────
+  ms-auth:
+    build:
+      context: ./backend
+      dockerfile: ms-auth/Dockerfile
+    container_name: smartlogix-ms-auth
+    ports:
+      - "8083:8083"
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-SmartLogix2026-SuperSecretKey-MustBe256BitsOrMoreForHS256}
+      - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS:-86400000}
+    networks:
+      - smartlogix-network
+    restart: on-failure
+
+  # ─── MICROSERVICIO INVENTARIO ────────────────────────────────────────────────
+  ms-inventario:
+    build:
+      context: ./backend
+      dockerfile: ms-inventario/Dockerfile
+    container_name: smartlogix-ms-inventario
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-inventario:5432/db_inventario
+      - SPRING_DATASOURCE_USERNAME=admin
+      - SPRING_DATASOURCE_PASSWORD=admin_password
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      db-inventario:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - smartlogix-network
+    restart: on-failure
+
+  # ─── MICROSERVICIO PEDIDOS ───────────────────────────────────────────────────
+  ms-pedidos:
+    build:
+      context: ./backend
+      dockerfile: ms-pedidos/Dockerfile
+    container_name: smartlogix-ms-pedidos
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-pedidos:5432/db_pedidos
+      - SPRING_DATASOURCE_USERNAME=admin
+      - SPRING_DATASOURCE_PASSWORD=admin_password
+      - INVENTARIO_SERVICE_URL=http://ms-inventario:8081
+      - RABBITMQ_HOST=rabbitmq
+      - RESILIENCE4J_CIRCUITBREAKER_INSTANCES_INVENTARIOCB_REGISTERHEALTHINDICATOR=true
+    depends_on:
+      db-pedidos:
+        condition: service_healthy
+      ms-inventario:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - smartlogix-network
+    restart: on-failure
+
+  # ─── BFF / API GATEWAY ────────────────────────────────────────────────────
+  bff:
+    build:
+      context: ./backend
+      dockerfile: bff/Dockerfile
+    container_name: smartlogix-bff
+    ports:
+      - "9090:8080"
+    environment:
+      - INVENTARIO_SERVICE_URL=http://ms-inventario:8081
+      - PEDIDOS_SERVICE_URL=http://ms-pedidos:8082
+      - AUTH_SERVICE_URL=http://ms-auth:8083
+      # ── PayPal ──────────────────────────────────────────────────────────────
+      - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID:-TU_CLIENT_ID_SANDBOX}
+      - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET:-TU_CLIENT_SECRET_SANDBOX}
+      - PAYPAL_MODE=${PAYPAL_MODE:-sandbox}
+      - PAYPAL_RETURN_URL=${PAYPAL_RETURN_URL:-http://localhost:3000/pago/exito}
+      - PAYPAL_CANCEL_URL=${PAYPAL_CANCEL_URL:-http://localhost:3000/pago/cancelado}
+    depends_on:
+      - ms-auth
+      - ms-inventario
+      - ms-pedidos
+    networks:
+      - smartlogix-network
+    restart: on-failure
+
+  # ─── FRONTEND REACT ──────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+    container_name: smartlogix-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_BFF_URL=http://localhost:9090/api
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - bff
+    networks:
+      - smartlogix-network
+
+networks:
+  smartlogix-network:
+    driver: bridge
+
+volumes:
+  pgdata_inventario:
+  pgdata_pedidos:
+  rabbitmq_data:

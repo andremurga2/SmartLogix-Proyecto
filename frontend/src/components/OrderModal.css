@@ -1,0 +1,77 @@
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: var(--glass-border);
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.btn-close {
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+}
+
+.btn-close:hover {
+  color: var(--text-bright);
+}
+
+.product-summary {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.summary-row:last-child {
+  margin-bottom: 0;
+}
+
+.input-group {
+  margin-bottom: 1.5rem;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.total-price {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: var(--glass-border);
+  margin-bottom: 1.5rem;
+}
+
+.total-price h3 {
+  color: var(--primary);
+  font-size: 1.8rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,41 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: ms-pedidos
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/db_pedidos}
+    username: ${SPRING_DATASOURCE_USERNAME:admin}
+    password: ${SPRING_DATASOURCE_PASSWORD:admin_password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+
+# Configuración del Cliente Feign para ms-inventario
+smartlogix:
+  inventario:
+    url: ${INVENTARIO_SERVICE_URL:http://localhost:8081}
+
+# Configuración del Circuit Breaker (Resilience4j)
+resilience4j.circuitbreaker:
+  instances:
+    inventarioCB:
+      registerHealthIndicator: true
+      slidingWindowSize: 5
+      permittedNumberOfCallsInHalfOpenState: 3
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 3
+      waitDurationInOpenState: 10s
+      failureRateThreshold: 50
