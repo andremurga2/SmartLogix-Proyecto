@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Builder
@@ -13,10 +15,12 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class PedidoDTO {
     private Long id;
-    private String skuProducto;
-    private Integer cantidad;
+
+    @Builder.Default
+    private List<PedidoItemDTO> items = new ArrayList<>();
+
     private BigDecimal precioTotal;
     private String estado;
     private String mensaje;
-    private String paypalOrderId; // ← nuevo campo
+    private String paypalOrderId;
 }

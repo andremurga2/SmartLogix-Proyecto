@@ -3,6 +3,7 @@ package com.smartlogix.bff.service;
 import com.smartlogix.bff.client.InventarioClient;
 import com.smartlogix.bff.client.PedidosClient;
 import com.smartlogix.bff.model.PedidoDTO;
+import com.smartlogix.bff.model.PedidoItemDTO;
 import com.smartlogix.bff.model.ProductoDTO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,15 +52,27 @@ class BffServiceTest {
     @Test
     void debeRealizarCompra() {
         // Arrange
-        PedidoDTO request = new PedidoDTO();
-        request.setSkuProducto("SKU-1");
-        request.setCantidad(2);
+        PedidoItemDTO itemRequest = PedidoItemDTO.builder()
+                .skuProducto("SKU-1")
+                .cantidad(2)
+                .build();
 
-        PedidoDTO response = new PedidoDTO();
-        response.setSkuProducto("SKU-1");
-        response.setCantidad(2);
-        response.setEstado("COMPLETADO");
-        response.setPrecioTotal(new BigDecimal("2000"));
+        PedidoDTO request = PedidoDTO.builder()
+                .items(Collections.singletonList(itemRequest))
+                .build();
+
+        PedidoItemDTO itemResponse = PedidoItemDTO.builder()
+                .skuProducto("SKU-1")
+                .cantidad(2)
+                .precioUnitario(new BigDecimal("1000"))
+                .subtotal(new BigDecimal("2000"))
+                .build();
+
+        PedidoDTO response = PedidoDTO.builder()
+                .items(Collections.singletonList(itemResponse))
+                .estado("COMPLETADO")
+                .precioTotal(new BigDecimal("2000"))
+                .build();
 
         when(pedidosClient.crearPedido(request)).thenReturn(response);
 

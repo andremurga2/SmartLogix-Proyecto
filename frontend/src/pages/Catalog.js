@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import ProductCard from '../components/ProductCard';
-import OrderModal from '../components/OrderModal';
+import CartModal from '../components/CartModal';
 import { api } from '../services/api';
+import { useCart } from '../context/CartContext';
 
 const Catalog = () => {
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  const [selectedProduct, setSelectedProduct] = useState(null);
+
+  const [showCart, setShowCart] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  const { cantidadTotal } = useCart();
 
   const fetchCatalogo = async () => {
     try {
@@ -29,16 +32,10 @@ const Catalog = () => {
   }, []);
 
   const handlePurchaseSuccess = (response) => {
-    setSelectedProduct(null);
+    setShowCart(false);
     setSuccessMsg(response.mensaje || '¡Pedido completado con éxito!');
-    
-    // Actualizar catálogo para reflejar el stock descontado
     fetchCatalogo();
-    
-    // Ocultar mensaje después de 5 segundos
-    setTimeout(() => {
-      setSuccessMsg('');
-    }, 5000);
+    setTimeout(() => setSuccessMsg(''), 5000);
   };
 
   return (
@@ -47,7 +44,7 @@ const Catalog = () => {
         <div className="hero-content">
           <h1 className="hero-title">Catálogo SmartLogix</h1>
           <p className="hero-subtitle">
-            Gestión inteligente de inventario y pedidos. Plataforma integrada 
+            Gestión inteligente de inventario y pedidos. Plataforma integrada
             para administrar tus recursos en tiempo real.
           </p>
         </div>
@@ -89,20 +86,29 @@ const Catalog = () => {
         ) : (
           <div className="grid grid-cols-4">
             {productos.map(producto => (
-              <ProductCard 
-                key={producto.sku} 
-                producto={producto} 
-                onBuyClick={setSelectedProduct} 
-              />
+              <ProductCard key={producto.sku} producto={producto} />
             ))}
           </div>
         )}
       </main>
 
-      {selectedProduct && (
-        <OrderModal 
-          producto={selectedProduct} 
-          onClose={() => setSelectedProduct(null)}
+      {/* Botón flotante del carrito */}
+      <button
+        className="btn-primary"
+        onClick={() => setShowCart(true)}
+        style={{
+          position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 500,
+          borderRadius: '50px', padding: '1rem 1.5rem', display: 'flex',
+          alignItems: 'center', gap: '0.5rem', boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+        }}
+      >
+        <i className="ri-shopping-cart-2-line" style={{ fontSize: '1.3rem' }}></i>
+        Carrito {cantidadTotal > 0 && `(${cantidadTotal})`}
+      </button>
+
+      {showCart && (
+        <CartModal
+          onClose={() => setShowCart(false)}
           onPurchaseSuccess={handlePurchaseSuccess}
         />
       )}

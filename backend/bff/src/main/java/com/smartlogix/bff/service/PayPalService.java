@@ -3,12 +3,17 @@ package com.smartlogix.bff.service;
 import com.paypal.http.HttpResponse;
 import com.paypal.orders.*;
 import com.paypal.core.PayPalHttpClient;
+import com.smartlogix.bff.client.InventarioClient;
+import com.smartlogix.bff.model.ItemCarritoDTO;
+import com.smartlogix.bff.model.ProductoDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -18,6 +23,7 @@ import java.util.NoSuchElementException;
 public class PayPalService {
 
     private final PayPalHttpClient payPalHttpClient;
+    private final InventarioClient inventarioClient;
 
     @Value("${paypal.return-url}")
     private String returnUrl;
@@ -26,9 +32,32 @@ public class PayPalService {
     private String cancelUrl;
 
     /**
-     * Crea una orden PayPal y retorna el approveUrl para redirigir al usuario.
+     * Crea una orden PayPal con el desglose real del carrito (un PayPal Item por SKU)
+     * y retorna el approveUrl para redirigir al usuario.
+     * El precio de cada producto se vuelve a consultar al inventario (nunca se confía
+     * en un monto que venga del frontend).
      */
-    public Order crearOrden(String monto, String moneda, String descripcion) throws IOException {
+    public Order crearOrden(List<ItemCarritoDTO> itemsCarrito, String moneda) throws IOException {
+        if (itemsCarrito == null || itemsCarrito.isEmpty()) {
+            throw new IllegalArgumentException("El carrito está vacío.");
+        }
+
+        List<Item> paypalItems = new ArrayList<>();
+        BigDecimal totalCarrito = BigDecimal.ZERO;
+
+        for (ItemCarritoDTO itemCarrito : itemsCarrito) {
+            ProductoDTO producto = inventarioClient.obtenerPorSku(itemCarrito.getSkuProducto());
+
+            BigDecimal subtotal = producto.getPrecio().multiply(BigDecimal.valueOf(itemCarrito.getCantidad()));
+            totalCarrito = totalCarrito.add(subtotal);
+
+            paypalItems.add(new Item()
+                    .name(producto.getNombre())
+                    .sku(producto.getSku())
+                    .unitAmount(new Money().currencyCode(moneda).value(producto.getPrecio().toPlainString()))
+                    .quantity(String.valueOf(itemCarrito.getCantidad())));
+        }
+
         OrderRequest orderRequest = new OrderRequest();
         orderRequest.checkoutPaymentIntent("CAPTURE");
 
@@ -42,10 +71,13 @@ public class PayPalService {
         orderRequest.applicationContext(applicationContext);
 
         PurchaseUnitRequest purchaseUnit = new PurchaseUnitRequest()
-                .description(descripcion)
+                .description("Compra SmartLogix (" + itemsCarrito.size() + " producto(s))")
                 .amountWithBreakdown(new AmountWithBreakdown()
                         .currencyCode(moneda)
-                        .value(monto));
+                        .value(totalCarrito.toPlainString())
+                        .amountBreakdown(new AmountBreakdown()
+                                .itemTotal(new Money().currencyCode(moneda).value(totalCarrito.toPlainString()))))
+                .items(paypalItems);
 
         orderRequest.purchaseUnits(List.of(purchaseUnit));
 
@@ -54,7 +86,8 @@ public class PayPalService {
         request.requestBody(orderRequest);
 
         HttpResponse<Order> response = payPalHttpClient.execute(request);
-        log.info("Orden PayPal creada. ID: {}, Status: {}", response.result().id(), response.result().status());
+        log.info("Orden PayPal creada. ID: {}, Status: {}, Total: {}",
+                response.result().id(), response.result().status(), totalCarrito);
         return response.result();
     }
 

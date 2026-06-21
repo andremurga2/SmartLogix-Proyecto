@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { CartProvider } from './context/CartContext';
 import Catalog from './pages/Catalog';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -10,6 +11,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
+    <CartProvider>
     <Router>
       <div className="App">
         <Routes>
@@ -48,6 +50,7 @@ function App() {
         </Routes>
       </div>
     </Router>
+    </CartProvider>
   );
 }
 

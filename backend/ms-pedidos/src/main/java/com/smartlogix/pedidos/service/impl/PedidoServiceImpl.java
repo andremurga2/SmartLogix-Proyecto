@@ -6,7 +6,9 @@ import com.smartlogix.pedidos.event.PedidoCreadoEvent;
 import com.smartlogix.pedidos.event.PedidoEventPublisher;
 import com.smartlogix.pedidos.factory.PedidoFactory;
 import com.smartlogix.pedidos.model.dto.PedidoDTO;
+import com.smartlogix.pedidos.model.dto.PedidoItemDTO;
 import com.smartlogix.pedidos.model.entity.Pedido;
+import com.smartlogix.pedidos.model.entity.PedidoItem;
 import com.smartlogix.pedidos.repository.PedidoRepository;
 import com.smartlogix.pedidos.service.PedidoService;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -33,40 +35,57 @@ public class PedidoServiceImpl implements PedidoService {
     @Transactional
     @CircuitBreaker(name = "inventarioCB", fallbackMethod = "crearPedidoFallback")
     public PedidoDTO crearPedido(PedidoDTO pedidoDTO) {
-        log.info("Creando pedido. SKU: {}, PayPal Order ID: {}",
-                pedidoDTO.getSkuProducto(), pedidoDTO.getPaypalOrderId());
-
-        // 1. Obtener producto del inventario (síncrono via Feign)
-        ProductoResponse producto = inventarioClient.obtenerProducto(pedidoDTO.getSkuProducto());
-
-        // 2. Validar stock
-        if (producto.getStockActual() < pedidoDTO.getCantidad()) {
-            throw new RuntimeException("Stock insuficiente en el inventario.");
+        if (pedidoDTO.getItems() == null || pedidoDTO.getItems().isEmpty()) {
+            throw new IllegalArgumentException("El pedido debe contener al menos un producto.");
         }
 
-        // 3. Descontar stock (síncrono — garantiza consistencia antes de confirmar)
-        inventarioClient.descontarStock(pedidoDTO.getSkuProducto(), pedidoDTO.getCantidad());
+        log.info("Creando pedido con {} ítem(s). PayPal Order ID: {}",
+                pedidoDTO.getItems().size(), pedidoDTO.getPaypalOrderId());
 
-        // 4. Calcular precio total
-        BigDecimal precioTotal = producto.getPrecio().multiply(BigDecimal.valueOf(pedidoDTO.getCantidad()));
+        Pedido pedido = pedidoFactory.toEntity(pedidoDTO);
+        BigDecimal totalPedido = BigDecimal.ZERO;
 
-        // 5. Guardar pedido con referencia PayPal
-        Pedido entity = pedidoFactory.toEntity(pedidoDTO);
-        entity.setPrecioTotal(precioTotal);
-        entity.setEstado("COMPLETADO");
-        entity.setPaypalOrderId(pedidoDTO.getPaypalOrderId());
+        // 1. Validar y descontar stock de CADA ítem (síncrono, dentro de la misma transacción).
+        //    Si cualquier ítem falla, @Transactional hace rollback de todo el pedido,
+        //    pero el stock ya descontado en ms-inventario para ítems previos en este
+        //    loop NO se revierte automáticamente (ver nota más abajo).
+        for (PedidoItemDTO itemDTO : pedidoDTO.getItems()) {
+            ProductoResponse producto = inventarioClient.obtenerProducto(itemDTO.getSkuProducto());
 
-        Pedido guardado = pedidoRepository.save(entity);
+            if (producto.getStockActual() < itemDTO.getCantidad()) {
+                throw new RuntimeException(
+                        "Stock insuficiente para " + itemDTO.getSkuProducto() +
+                        " (disponible: " + producto.getStockActual() + ", solicitado: " + itemDTO.getCantidad() + ")");
+            }
 
-        // 6. Publicar evento asíncrono → RabbitMQ (Event-Driven)
-        //    ms-inventario puede escucharlo para auditoría, notificaciones, etc.
-        eventPublisher.publicarPedidoCreado(new PedidoCreadoEvent(
-                guardado.getId(),
-                guardado.getSkuProducto(),
-                guardado.getCantidad(),
-                guardado.getPaypalOrderId(),
-                guardado.getEstado()
-        ));
+            inventarioClient.descontarStock(itemDTO.getSkuProducto(), itemDTO.getCantidad());
+
+            BigDecimal subtotal = producto.getPrecio().multiply(BigDecimal.valueOf(itemDTO.getCantidad()));
+            totalPedido = totalPedido.add(subtotal);
+
+            PedidoItem itemEntity = pedidoFactory.toItemEntity(itemDTO);
+            itemEntity.setPrecioUnitario(producto.getPrecio());
+            itemEntity.setSubtotal(subtotal);
+            pedido.addItem(itemEntity);
+        }
+
+        // 2. Guardar pedido + items (cascade ALL los persiste juntos)
+        pedido.setPrecioTotal(totalPedido);
+        pedido.setEstado("COMPLETADO");
+        pedido.setPaypalOrderId(pedidoDTO.getPaypalOrderId());
+
+        Pedido guardado = pedidoRepository.save(pedido);
+
+        // 3. Publicar un evento por cada ítem (mantiene compatibilidad con el listener actual)
+        for (PedidoItem item : guardado.getItems()) {
+            eventPublisher.publicarPedidoCreado(new PedidoCreadoEvent(
+                    guardado.getId(),
+                    item.getSkuProducto(),
+                    item.getCantidad(),
+                    guardado.getPaypalOrderId(),
+                    guardado.getEstado()
+            ));
+        }
 
         PedidoDTO responseDTO = pedidoFactory.toDTO(guardado);
         responseDTO.setMensaje("Pedido procesado y pago PayPal confirmado.");
@@ -76,12 +95,19 @@ public class PedidoServiceImpl implements PedidoService {
     public PedidoDTO crearPedidoFallback(PedidoDTO pedidoDTO, Throwable t) {
         log.error("Circuit Breaker activado. Fallo al comunicarse con ms-inventario: {}", t.getMessage());
 
-        Pedido entity = pedidoFactory.toEntity(pedidoDTO);
-        entity.setPrecioTotal(BigDecimal.ZERO);
-        entity.setEstado("FALLIDO");
-        entity.setPaypalOrderId(pedidoDTO.getPaypalOrderId());
+        Pedido pedido = pedidoFactory.toEntity(pedidoDTO);
+        pedido.setPrecioTotal(BigDecimal.ZERO);
+        pedido.setEstado("FALLIDO");
+        pedido.setPaypalOrderId(pedidoDTO.getPaypalOrderId());
 
-        Pedido guardado = pedidoRepository.save(entity);
+        if (pedidoDTO.getItems() != null) {
+            for (PedidoItemDTO itemDTO : pedidoDTO.getItems()) {
+                PedidoItem itemEntity = pedidoFactory.toItemEntity(itemDTO);
+                pedido.addItem(itemEntity);
+            }
+        }
+
+        Pedido guardado = pedidoRepository.save(pedido);
         PedidoDTO responseDTO = pedidoFactory.toDTO(guardado);
         responseDTO.setMensaje("El servicio de inventario no está disponible. Pedido registrado como FALLIDO.");
         return responseDTO;

@@ -7,6 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Builder
@@ -20,11 +22,9 @@ public class Pedido {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
-    private String skuProducto;
-
-    @Column(nullable = false)
-    private Integer cantidad;
+    @Builder.Default
+    @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    private List<PedidoItem> items = new ArrayList<>();
 
     @Column(nullable = false)
     private BigDecimal precioTotal;
@@ -33,5 +33,11 @@ public class Pedido {
     private String estado; // PENDIENTE, COMPLETADO, CANCELADO, FALLIDO
 
     @Column(name = "paypal_order_id")
-    private String paypalOrderId; // ← nuevo campo
+    private String paypalOrderId;
+
+    /** Mantiene la relación bidireccional sincronizada. */
+    public void addItem(PedidoItem item) {
+        items.add(item);
+        item.setPedido(this);
+    }
 }

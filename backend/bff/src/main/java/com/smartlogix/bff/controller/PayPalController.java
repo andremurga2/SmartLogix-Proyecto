@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -22,16 +24,15 @@ public class PayPalController {
     private final BffService bffService;
 
     /**
-     * PASO 1 — Crea la orden en PayPal y devuelve la URL de aprobación del usuario.
-     * El frontend redirige (o abre popup) con approveUrl.
+     * PASO 1 — Crea la orden en PayPal con el desglose del carrito completo
+     * y devuelve la URL de aprobación del usuario.
      */
     @PostMapping("/crear-orden")
     public ResponseEntity<CrearOrdenResponse> crearOrden(@RequestBody CrearOrdenRequest request) {
         try {
             Order order = payPalService.crearOrden(
-                    request.getMonto(),
-                    request.getMoneda() != null ? request.getMoneda() : "USD",
-                    request.getDescripcion() != null ? request.getDescripcion() : "Compra SmartLogix"
+                    request.getItems(),
+                    request.getMoneda() != null ? request.getMoneda() : "USD"
             );
 
             String approveUrl = payPalService.obtenerApproveUrl(order);
@@ -42,6 +43,9 @@ public class PayPalController {
                     order.status()
             ));
 
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(new CrearOrdenResponse(null, null, "ERROR: " + e.getMessage()));
         } catch (IOException e) {
             log.error("Error al crear orden PayPal: {}", e.getMessage());
             return ResponseEntity.internalServerError()
@@ -51,7 +55,7 @@ public class PayPalController {
 
     /**
      * PASO 2 — Captura el pago de una orden ya aprobada por el usuario en PayPal
-     * y, si el pago fue exitoso (COMPLETED), registra el pedido en ms-pedidos.
+     * y, si el pago fue exitoso (COMPLETED), registra el pedido (con todos sus ítems) en ms-pedidos.
      */
     @PostMapping("/capturar-orden")
     public ResponseEntity<PagoResponse> capturarOrden(@RequestBody CapturarOrdenRequest request) {
@@ -69,11 +73,18 @@ public class PayPalController {
                 ));
             }
 
-            // 2. Pago exitoso → registrar pedido en ms-pedidos
-            PedidoDTO pedidoDTO = new PedidoDTO();
-            pedidoDTO.setSkuProducto(request.getSkuProducto());
-            pedidoDTO.setCantidad(request.getCantidad());
-            pedidoDTO.setPaypalOrderId(request.getOrderId());
+            // 2. Pago exitoso → registrar pedido con todos los ítems en ms-pedidos
+            List<PedidoItemDTO> itemsDTO = request.getItems().stream()
+                    .map(item -> PedidoItemDTO.builder()
+                            .skuProducto(item.getSkuProducto())
+                            .cantidad(item.getCantidad())
+                            .build())
+                    .collect(Collectors.toList());
+
+            PedidoDTO pedidoDTO = PedidoDTO.builder()
+                    .items(itemsDTO)
+                    .paypalOrderId(request.getOrderId())
+                    .build();
 
             PedidoDTO pedidoCreado = bffService.realizarCompra(pedidoDTO);
 
@@ -108,7 +119,6 @@ public class PayPalController {
 
         log.info("Webhook PayPal recibido. TransmissionId: {}", transmissionId);
         log.debug("Payload: {}", payload);
-        // Aquí puedes parsear el evento y actualizar el estado del pedido si lo necesitas
         return ResponseEntity.ok().build();
     }
 }
