@@ -60,6 +60,26 @@ services:
       timeout: 5s
       retries: 10
 
+  # ─── BASE DE DATOS AUTH ──────────────────────────────────────────────────────
+  db-auth:
+    image: postgres:15-alpine
+    container_name: smartlogix-db-auth
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin_password
+      POSTGRES_DB: db_auth
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata_auth:/var/lib/postgresql/data
+    networks:
+      - smartlogix-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d db_auth"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # ─── MICROSERVICIO AUTH (JWT) ─────────────────────────────────────────────
   ms-auth:
     build:
@@ -69,11 +89,18 @@ services:
     ports:
       - "8083:8083"
     environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-auth:5432/db_auth
+      - SPRING_DATASOURCE_USERNAME=admin
+      - SPRING_DATASOURCE_PASSWORD=admin_password
       - JWT_SECRET=${JWT_SECRET:-SmartLogix2026-SuperSecretKey-MustBe256BitsOrMoreForHS256}
       - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS:-86400000}
+    depends_on:
+      db-auth:
+        condition: service_healthy
     networks:
       - smartlogix-network
     restart: on-failure
+    
 
   # ─── MICROSERVICIO INVENTARIO ────────────────────────────────────────────────
   ms-inventario:
@@ -170,5 +197,6 @@ networks:
 
 volumes:
   pgdata_inventario:
+  pgdata_auth:
   pgdata_pedidos:
   rabbitmq_data:

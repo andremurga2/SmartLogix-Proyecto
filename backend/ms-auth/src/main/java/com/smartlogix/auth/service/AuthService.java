@@ -2,14 +2,16 @@ package com.smartlogix.auth.service;
 
 import com.smartlogix.auth.model.LoginResponse;
 import com.smartlogix.auth.model.ValidateResponse;
+import com.smartlogix.auth.model.entity.Usuario;
+import com.smartlogix.auth.repository.UsuarioRepository;
 import com.smartlogix.auth.util.JwtUtil;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -17,29 +19,23 @@ import java.util.Map;
 public class AuthService {
 
     private final JwtUtil jwtUtil;
-
-    /** Usuarios en memoria (mismos que tenía el BFF original) */
-    private static final Map<String, String[]> USERS = new HashMap<>();
-
-    static {
-        USERS.put("admin",  new String[]{"admin123",   "ADMIN"});
-        USERS.put("user1",  new String[]{"password123", "USER"});
-        USERS.put("user2",  new String[]{"password456", "USER"});
-    }
+    private final UsuarioRepository usuarioRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public LoginResponse login(String username, String password) {
-        String[] userData = USERS.get(username);
+        Optional<Usuario> usuarioOpt = usuarioRepository.findByUsername(username);
 
-        if (userData == null || !userData[0].equals(password)) {
+        if (usuarioOpt.isEmpty() || !usuarioOpt.get().isActivo()
+                || !passwordEncoder.matches(password, usuarioOpt.get().getPasswordHash())) {
             log.warn("Intento de login fallido para usuario: {}", username);
             return new LoginResponse(false, "Usuario o contraseña inválidos");
         }
 
-        String role  = userData[1];
-        String token = jwtUtil.generateToken(username, role);
-        log.info("Login exitoso para: {} [{}]", username, role);
+        Usuario usuario = usuarioOpt.get();
+        String token = jwtUtil.generateToken(usuario.getUsername(), usuario.getRole());
+        log.info("Login exitoso para: {} [{}]", usuario.getUsername(), usuario.getRole());
 
-        return new LoginResponse(true, "Login exitoso", token, username, role);
+        return new LoginResponse(true, "Login exitoso", token, usuario.getUsername(), usuario.getRole());
     }
 
     public ValidateResponse validate(String bearerToken) {
