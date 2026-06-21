@@ -70,6 +70,19 @@ public class BffController {
         }
     }
 
+    /** POST /api/auth/registro — registro público (sin token), siempre rol USER */
+    @PostMapping("/auth/registro")
+    public ResponseEntity<?> registrarUsuario(@RequestBody UsuarioDTO usuarioDTO) {
+        try {
+            return ResponseEntity.ok(bffService.registrarUsuario(usuarioDTO));
+        } catch (feign.FeignException.BadRequest e) {
+            return ResponseEntity.badRequest().body(e.contentUTF8());
+        } catch (Exception e) {
+            log.error("Error en registro: {}", e.getMessage());
+            return ResponseEntity.status(503).body("Servicio de autenticación no disponible");
+        }
+    }
+
     // ── Admin: Productos ───────────────────────────────────────────────────────
     @PostMapping("/admin/productos")
     public ResponseEntity<?> crearProducto(

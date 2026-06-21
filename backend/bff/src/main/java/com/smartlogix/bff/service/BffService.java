@@ -46,6 +46,10 @@ public class BffService {
     }
 
     // ── Admin: Usuarios ───────────────────────────────────────────────────────
+    public UsuarioDTO registrarUsuario(UsuarioDTO dto) {
+        return authClient.registrarUsuario(dto);
+    }
+    
     public List<UsuarioDTO> listarUsuarios() {
         return authClient.listarUsuarios();
     }

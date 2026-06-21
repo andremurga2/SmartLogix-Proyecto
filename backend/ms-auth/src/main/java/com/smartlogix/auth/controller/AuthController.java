@@ -59,6 +59,16 @@ public class AuthController {
         }
     }
 
+    /** POST /api/auth/registro — registro público, siempre crea rol USER */
+    @PostMapping("/registro")
+    public ResponseEntity<?> registrarUsuario(@RequestBody UsuarioDTO dto) {
+        try {
+            return ResponseEntity.ok(authService.registrarUsuario(dto));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
     /** PUT /api/auth/usuarios/{id} — actualiza rol/estado/password */
     @PutMapping("/usuarios/{id}")
     public ResponseEntity<?> actualizarUsuario(@PathVariable Long id, @RequestBody UsuarioDTO dto) {

@@ -74,6 +74,24 @@ public class AuthService {
         return toDTO(usuarioRepository.save(usuario));
     }
 
+    /** Registro público — siempre crea rol USER, sin importar lo que mande el cliente. */
+    public UsuarioDTO registrarUsuario(UsuarioDTO dto) {
+        if (dto.getUsername() == null || dto.getUsername().isBlank()
+                || dto.getPassword() == null || dto.getPassword().isBlank()) {
+            throw new IllegalArgumentException("Usuario y contraseña son obligatorios.");
+        }
+        if (usuarioRepository.findByUsername(dto.getUsername()).isPresent()) {
+            throw new IllegalArgumentException("El usuario ya existe: " + dto.getUsername());
+        }
+        Usuario usuario = Usuario.builder()
+                .username(dto.getUsername())
+                .passwordHash(passwordEncoder.encode(dto.getPassword()))
+                .role("USER") // forzado, ignora cualquier role que venga en el DTO
+                .activo(true)
+                .build();
+        return toDTO(usuarioRepository.save(usuario));
+    }
+
     public UsuarioDTO actualizarUsuario(Long id, UsuarioDTO dto) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + id));

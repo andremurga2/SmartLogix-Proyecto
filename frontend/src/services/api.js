@@ -36,6 +36,10 @@ export const api = {
     return this.request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) });
   },
 
+  async registrar(usuario) {
+    return this.request('/auth/registro', { method: 'POST', body: JSON.stringify(usuario) });
+  },
+
   // ── Store / Catálogo ──────────────────────────────────────────────────────
   async getCatalogo() {
     return this.request('/store/catalogo');

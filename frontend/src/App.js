@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Catalog from './pages/Catalog';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Admin from './pages/Admin';
 import PagoExito from './pages/PagoExito';
 import PagoCancelado from './pages/PagoCancelado';
@@ -14,6 +15,9 @@ function App() {
         <Routes>
           {/* Pública: Login */}
           <Route path="/login" element={<Login />} />
+
+          {/* Pública: Registro */}
+          <Route path="/register" element={<Register />} />
 
           {/* Retorno PayPal */}
           <Route path="/pago/exito" element={<PagoExito />} />

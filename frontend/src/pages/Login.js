@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import '../styles/Login.css';
 
@@ -90,6 +90,9 @@ const Login = () => {
                         {loading ? 'Cargando...' : 'Iniciar Sesión'}
                     </button>
                 </form>
+                 <p style={{ textAlign: 'center', margin: '15px 0', fontSize: '0.9em', color: '#666' }}>
+                    ¿No tienes cuenta? <Link to="/register" style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none' }}>Regístrate aquí</Link>
+                </p>
 
                 <div className="demo-section">
                     <p>Prueba con:</p>

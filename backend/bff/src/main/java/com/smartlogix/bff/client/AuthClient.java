@@ -16,6 +16,9 @@ public interface AuthClient {
     @GetMapping("/api/auth/usuarios")
     List<UsuarioDTO> listarUsuarios();
 
+    @PostMapping("/api/auth/registro")
+    UsuarioDTO registrarUsuario(@RequestBody UsuarioDTO dto);
+
     @PostMapping("/api/auth/usuarios")
     UsuarioDTO crearUsuario(@RequestBody UsuarioDTO dto);
 
