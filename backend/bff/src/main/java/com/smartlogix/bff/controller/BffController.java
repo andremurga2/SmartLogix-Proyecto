@@ -1,5 +1,4 @@
 package com.smartlogix.bff.controller;
-
 import com.smartlogix.bff.client.AuthClient;
 import com.smartlogix.bff.model.*;
 import com.smartlogix.bff.service.BffService;
@@ -106,6 +105,38 @@ public class BffController {
         return ResponseEntity.ok(bffService.listarPedidos());
     }
 
+    @GetMapping("/admin/usuarios")
+    public ResponseEntity<?> listarUsuarios(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (!isAdminToken(authHeader)) return ResponseEntity.status(403).body("Acceso denegado.");
+        return ResponseEntity.ok(bffService.listarUsuarios());
+    }
+
+    @PostMapping("/admin/usuarios")
+    public ResponseEntity<?> crearUsuario(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestBody UsuarioDTO usuarioDTO) {
+        if (!isAdminToken(authHeader)) return ResponseEntity.status(403).body("Acceso denegado.");
+        return ResponseEntity.ok(bffService.crearUsuario(usuarioDTO));
+    }
+
+    @PutMapping("/admin/usuarios/{id}")
+    public ResponseEntity<?> actualizarUsuario(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @PathVariable Long id,
+            @RequestBody UsuarioDTO usuarioDTO) {
+        if (!isAdminToken(authHeader)) return ResponseEntity.status(403).body("Acceso denegado.");
+        return ResponseEntity.ok(bffService.actualizarUsuario(id, usuarioDTO));
+    }
+
+    @DeleteMapping("/admin/usuarios/{id}")
+    public ResponseEntity<?> eliminarUsuario(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @PathVariable Long id) {
+        if (!isAdminToken(authHeader)) return ResponseEntity.status(403).body("Acceso denegado.");
+        bffService.eliminarUsuario(id);
+        return ResponseEntity.noContent().build();
+    }
     // ── Helpers ────────────────────────────────────────────────────────────────
     private boolean isTokenValid(String authHeader) {
         if (authHeader == null || authHeader.isBlank()) return false;

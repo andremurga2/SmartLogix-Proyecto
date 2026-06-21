@@ -1,9 +1,11 @@
 package com.smartlogix.bff.service;
 
+import com.smartlogix.bff.client.AuthClient;
 import com.smartlogix.bff.client.InventarioClient;
 import com.smartlogix.bff.client.PedidosClient;
 import com.smartlogix.bff.model.PedidoDTO;
 import com.smartlogix.bff.model.ProductoDTO;
+import com.smartlogix.bff.model.UsuarioDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +17,7 @@ public class BffService {
 
     private final InventarioClient inventarioClient;
     private final PedidosClient pedidosClient;
+    private final AuthClient authClient;
 
     public List<ProductoDTO> obtenerCatalogo() {
         return inventarioClient.listarTodos();
@@ -40,5 +43,22 @@ public class BffService {
     // ── Admin: Pedidos ────────────────────────────────────────────────────────
     public List<PedidoDTO> listarPedidos() {
         return pedidosClient.listarPedidos();
+    }
+
+    // ── Admin: Usuarios ───────────────────────────────────────────────────────
+    public List<UsuarioDTO> listarUsuarios() {
+        return authClient.listarUsuarios();
+    }
+
+    public UsuarioDTO crearUsuario(UsuarioDTO dto) {
+        return authClient.crearUsuario(dto);
+    }
+
+    public UsuarioDTO actualizarUsuario(Long id, UsuarioDTO dto) {
+        return authClient.actualizarUsuario(id, dto);
+    }
+
+    public void eliminarUsuario(Long id) {
+        authClient.eliminarUsuario(id);
     }
 }

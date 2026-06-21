@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import '../styles/Admin.css';
 
 const EMPTY_PRODUCTO = { sku: '', nombre: '', descripcion: '', precio: '', stockActual: 0 };
+const EMPTY_USUARIO = { username: '', password: '', role: 'USER', activo: true };
 
 const Admin = () => {
     const [user, setUser] = useState(null);
@@ -18,6 +19,12 @@ const Admin = () => {
     const [editando, setEditando] = useState(false);
     const [form, setForm] = useState(EMPTY_PRODUCTO);
     const [saving, setSaving] = useState(false);
+
+    const [usuarios, setUsuarios] = useState([]);
+    const [showUserModal, setShowUserModal] = useState(false);
+    const [editandoUser, setEditandoUser] = useState(false);
+    const [userForm, setUserForm] = useState(EMPTY_USUARIO);
+    const [savingUser, setSavingUser] = useState(false);
 
     const navigate = useNavigate();
 
@@ -35,9 +42,14 @@ const Admin = () => {
         setLoading(true);
         setError(null);
         try {
-            const [prods, peds] = await Promise.all([api.getCatalogo(), api.getPedidos()]);
+            const [prods, peds, users] = await Promise.all([
+                api.getCatalogo(),
+                api.getPedidos(),
+                api.getUsuarios(),
+            ]);
             setProductos(prods || []);
             setPedidos(peds || []);
+            setUsuarios(users || []);
         } catch (err) {
             setError('Error cargando datos: ' + err.message);
         } finally {
@@ -92,13 +104,54 @@ const Admin = () => {
             alert('Error al eliminar: ' + err.message);
         }
     };
+    
+// ── Usuarios ──────────────────────────────────────────────────────────────
+    const abrirCrearUsuario = () => { setUserForm(EMPTY_USUARIO); setEditandoUser(false); setShowUserModal(true); };
 
-    // ── Usuarios (hardcoded — ms-auth usa usuarios en memoria) ────────────────
-    const usuarios = [
-        { username: 'admin', role: 'ADMIN', estado: 'Activo' },
-        { username: 'user1', role: 'USER', estado: 'Activo' },
-        { username: 'user2', role: 'USER', estado: 'Activo' },
-    ];
+    const abrirEditarUsuario = (u) => {
+        setUserForm({ id: u.id, username: u.username, password: '', role: u.role, activo: u.activo });
+        setEditandoUser(true);
+        setShowUserModal(true);
+    };
+
+    const handleUserFormChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setUserForm({ ...userForm, [name]: type === 'checkbox' ? checked : value });
+    };
+
+    const handleGuardarUsuario = async () => {
+        if (!userForm.username || (!editandoUser && !userForm.password)) {
+            alert('Usuario y contraseña son obligatorios.');
+            return;
+        }
+        setSavingUser(true);
+        try {
+            if (editandoUser) {
+                await api.actualizarUsuario(userForm.id, userForm);
+                alert('Usuario actualizado correctamente.');
+            } else {
+                await api.crearUsuario(userForm);
+                alert('Usuario creado correctamente.');
+            }
+            setShowUserModal(false);
+            fetchAll();
+        } catch (err) {
+            alert('Error: ' + err.message);
+        } finally {
+            setSavingUser(false);
+        }
+    };
+
+    const handleEliminarUsuario = async (u) => {
+        if (!window.confirm(`¿Eliminar el usuario ${u.username}?`)) return;
+        try {
+            await api.eliminarUsuario(u.id);
+            setUsuarios(usuarios.filter(x => x.id !== u.id));
+            alert('Usuario eliminado.');
+        } catch (err) {
+            alert('Error al eliminar: ' + err.message);
+        }
+    };
 
     if (loading) return <div className="loading">⏳ Cargando panel de administración...</div>;
 
@@ -212,20 +265,30 @@ const Admin = () => {
                     {activeTab === 'usuarios' && (
                         <section className="tab-content">
                             <div className="section-header">
-                                <h2>Usuarios del Sistema</h2>
-                                <span style={{ fontSize: 13, color: '#666' }}>Los usuarios están definidos en ms-auth (en memoria)</span>
+                                <h2>Usuarios del Sistema ({usuarios.length})</h2>
+                                <button className="btn-primary" onClick={abrirCrearUsuario}>+ Nuevo Usuario</button>
                             </div>
                             <div className="table-container">
                                 <table className="admin-table">
                                     <thead>
-                                        <tr><th>Usuario</th><th>Rol</th><th>Estado</th></tr>
+                                        <tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr>
                                     </thead>
                                     <tbody>
-                                        {usuarios.map(u => (
-                                            <tr key={u.username}>
+                                        {usuarios.length === 0 ? (
+                                            <tr><td colSpan="4" className="empty-cell">No hay usuarios</td></tr>
+                                        ) : usuarios.map(u => (
+                                            <tr key={u.id}>
                                                 <td>👤 {u.username}</td>
                                                 <td><span className={`role-badge ${u.role.toLowerCase()}`}>{u.role}</span></td>
-                                                <td><span className="status-active">{u.estado}</span></td>
+                                                <td>
+                                                    {u.activo
+                                                        ? <span className="status-active">Activo</span>
+                                                        : <span style={{ color: '#999' }}>Inactivo</span>}
+                                                </td>
+                                                <td>
+                                                    <button className="btn-edit" onClick={() => abrirEditarUsuario(u)}>✏️ Editar</button>
+                                                    <button className="btn-delete" onClick={() => handleEliminarUsuario(u)} style={{ marginLeft: 6 }}>🗑️ Eliminar</button>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -266,6 +329,75 @@ const Admin = () => {
                             </button>
                             <button onClick={handleGuardar} disabled={saving} style={{ padding: '8px 20px', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>
                                 {saving ? 'Guardando...' : editando ? 'Actualizar' : 'Crear'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Modal Crear/Editar Usuario ── */}
+            {showUserModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div style={{ background: '#fff', borderRadius: 12, padding: 32, width: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+                        <h2 style={{ marginBottom: 20 }}>{editandoUser ? '✏️ Editar Usuario' : '➕ Nuevo Usuario'}</h2>
+
+                        <div style={{ marginBottom: 14 }}>
+                            <label style={{ display: 'block', marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Usuario *</label>
+                            <input
+                                type="text"
+                                name="username"
+                                value={userForm.username}
+                                onChange={handleUserFormChange}
+                                disabled={editandoUser}
+                                style={{ width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 6, fontSize: 14, boxSizing: 'border-box', background: editandoUser ? '#f5f5f5' : '#fff' }}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: 14 }}>
+                            <label style={{ display: 'block', marginBottom: 4, fontWeight: 600, fontSize: 13 }}>
+                                {editandoUser ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña *'}
+                            </label>
+                            <input
+                                type="password"
+                                name="password"
+                                value={userForm.password}
+                                onChange={handleUserFormChange}
+                                style={{ width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: 14 }}>
+                            <label style={{ display: 'block', marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Rol</label>
+                            <select
+                                name="role"
+                                value={userForm.role}
+                                onChange={handleUserFormChange}
+                                style={{ width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
+                            >
+                                <option value="USER">USER</option>
+                                <option value="ADMIN">ADMIN</option>
+                            </select>
+                        </div>
+
+                        {editandoUser && (
+                            <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <input
+                                    type="checkbox"
+                                    id="activo"
+                                    name="activo"
+                                    checked={userForm.activo}
+                                    onChange={handleUserFormChange}
+                                />
+                                <label htmlFor="activo" style={{ fontWeight: 600, fontSize: 13 }}>Usuario activo</label>
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+                            <button onClick={() => setShowUserModal(false)} style={{ padding: '8px 20px', border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer', background: '#f5f5f5' }}>
+                                Cancelar
+                            </button>
+                            <button onClick={handleGuardarUsuario} disabled={savingUser} style={{ padding: '8px 20px', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>
+                                {savingUser ? 'Guardando...' : editandoUser ? 'Actualizar' : 'Crear'}
                             </button>
                         </div>
                     </div>

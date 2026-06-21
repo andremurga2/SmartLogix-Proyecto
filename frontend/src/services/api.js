@@ -62,6 +62,23 @@ export const api = {
   async eliminarProducto(sku) {
     return this.request(`/admin/productos/${sku}`, { method: 'DELETE' });
   },
+
+  // ── Admin: Usuarios ───────────────────────────────────────────────────────
+  async getUsuarios() {
+    return this.request('/admin/usuarios');
+  },
+
+  async crearUsuario(usuario) {
+    return this.request('/admin/usuarios', { method: 'POST', body: JSON.stringify(usuario) });
+  },
+
+  async actualizarUsuario(id, usuario) {
+    return this.request(`/admin/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(usuario) });
+  },
+
+  async eliminarUsuario(id) {
+    return this.request(`/admin/usuarios/${id}`, { method: 'DELETE' });
+  },
 };
 
 export default api;

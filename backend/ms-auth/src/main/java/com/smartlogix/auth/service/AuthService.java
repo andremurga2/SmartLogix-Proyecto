@@ -1,5 +1,6 @@
 package com.smartlogix.auth.service;
-
+import com.smartlogix.auth.model.UsuarioDTO;
+import java.util.List;
 import com.smartlogix.auth.model.LoginResponse;
 import com.smartlogix.auth.model.ValidateResponse;
 import com.smartlogix.auth.model.entity.Usuario;
@@ -52,5 +53,55 @@ public class AuthService {
         Claims claims = jwtUtil.validateToken(token);
         return new ValidateResponse(true, claims.getSubject(),
                 claims.get("role", String.class), "Token válido");
+    }
+    // ── Gestión de usuarios (Admin) ─────────────────────────────────────────────
+    public List<UsuarioDTO> listarUsuarios() {
+        return usuarioRepository.findAll().stream()
+                .map(this::toDTO)
+                .toList();
+    }
+
+    public UsuarioDTO crearUsuario(UsuarioDTO dto) {
+        if (usuarioRepository.findByUsername(dto.getUsername()).isPresent()) {
+            throw new IllegalArgumentException("El usuario ya existe: " + dto.getUsername());
+        }
+        Usuario usuario = Usuario.builder()
+                .username(dto.getUsername())
+                .passwordHash(passwordEncoder.encode(dto.getPassword()))
+                .role(dto.getRole())
+                .activo(true)
+                .build();
+        return toDTO(usuarioRepository.save(usuario));
+    }
+
+    public UsuarioDTO actualizarUsuario(Long id, UsuarioDTO dto) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + id));
+
+        if (dto.getRole() != null) {
+            usuario.setRole(dto.getRole());
+        }
+        if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
+            usuario.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
+        }
+        usuario.setActivo(dto.isActivo());
+
+        return toDTO(usuarioRepository.save(usuario));
+    }
+
+    public void eliminarUsuario(Long id) {
+        if (!usuarioRepository.existsById(id)) {
+            throw new IllegalArgumentException("Usuario no encontrado: " + id);
+        }
+        usuarioRepository.deleteById(id);
+    }
+
+    private UsuarioDTO toDTO(Usuario usuario) {
+        return UsuarioDTO.builder()
+                .id(usuario.getId())
+                .username(usuario.getUsername())
+                .role(usuario.getRole())
+                .activo(usuario.isActivo())
+                .build();
     }
 }
