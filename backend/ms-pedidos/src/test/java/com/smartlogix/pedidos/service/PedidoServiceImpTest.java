@@ -58,7 +58,6 @@ class PedidoServiceImplTest {
         productoResponse.setPrecio(new BigDecimal("500.00"));
         productoResponse.setStockActual(10);
 
-        // Pedido entity que simula lo que devuelve la factory
         pedidoEntity = new Pedido();
         pedidoEntity.setId(1L);
         pedidoEntity.setEstado("COMPLETADO");
@@ -68,7 +67,6 @@ class PedidoServiceImplTest {
 
     @Test
     void debeCrearPedidoCorrectamenteYPublicarEvento() {
-        // Arrange
         PedidoItem itemEntity = new PedidoItem();
         itemEntity.setSkuProducto("SKU-001");
         itemEntity.setCantidad(2);
@@ -83,26 +81,17 @@ class PedidoServiceImplTest {
         responseDTO.setPrecioTotal(new BigDecimal("1000.00"));
         when(pedidoFactory.toDTO(pedidoEntity)).thenReturn(responseDTO);
 
-        // Act
         PedidoDTO resultado = pedidoService.crearPedido(pedidoDTO);
 
-        // Assert
         assertNotNull(resultado);
         assertEquals("COMPLETADO", resultado.getEstado());
-
-        // Verifica que el stock fue descontado
         verify(inventarioClient, times(1)).descontarStock("SKU-001", 2);
-
-        // Verifica que el evento fue publicado a RabbitMQ
         verify(eventPublisher, times(1)).publicarPedidoCreado(any(PedidoCreadoEvent.class));
-
-        // Verifica que el pedido fue guardado
         verify(pedidoRepository, times(1)).save(any(Pedido.class));
     }
 
     @Test
     void debeCalcularTotalCorrecto() {
-        // Arrange: 2 unidades a $500 = $1000
         PedidoItem itemEntity = new PedidoItem();
         itemEntity.setSkuProducto("SKU-001");
         itemEntity.setCantidad(2);
@@ -112,14 +101,61 @@ class PedidoServiceImplTest {
         when(inventarioClient.obtenerProducto("SKU-001")).thenReturn(productoResponse);
         when(pedidoRepository.save(any(Pedido.class))).thenAnswer(inv -> {
             Pedido p = inv.getArgument(0);
-            // Capturamos el total calculado
             assertEquals(new BigDecimal("1000.00"), p.getPrecioTotal());
             return p;
         });
         when(pedidoFactory.toDTO(any())).thenReturn(new PedidoDTO());
 
-        // Act
         pedidoService.crearPedido(pedidoDTO);
+    }
+
+    @Test
+    void debeCrearPedidoConMultiplesItems() {
+        PedidoItemDTO item2 = new PedidoItemDTO();
+        item2.setSkuProducto("SKU-002");
+        item2.setCantidad(1);
+
+        pedidoDTO.setItems(List.of(itemDTO, item2));
+
+        PedidoItem itemEntity1 = new PedidoItem();
+        itemEntity1.setSkuProducto("SKU-001");
+        itemEntity1.setCantidad(2);
+
+        PedidoItem itemEntity2 = new PedidoItem();
+        itemEntity2.setSkuProducto("SKU-002");
+        itemEntity2.setCantidad(1);
+
+        ProductoResponse producto2 = new ProductoResponse();
+        producto2.setSku("SKU-002");
+        producto2.setPrecio(new BigDecimal("200.00"));
+        producto2.setStockActual(5);
+
+        when(pedidoFactory.toEntity(pedidoDTO)).thenReturn(pedidoEntity);
+        when(pedidoFactory.toItemEntity(itemDTO)).thenReturn(itemEntity1);
+        when(pedidoFactory.toItemEntity(item2)).thenReturn(itemEntity2);
+        when(inventarioClient.obtenerProducto("SKU-001")).thenReturn(productoResponse);
+        when(inventarioClient.obtenerProducto("SKU-002")).thenReturn(producto2);
+        when(pedidoRepository.save(any())).thenReturn(pedidoEntity);
+        when(pedidoFactory.toDTO(any())).thenReturn(new PedidoDTO());
+
+        pedidoService.crearPedido(pedidoDTO);
+
+        // Total esperado: 2*500 + 1*200 = $1200
+        verify(inventarioClient, times(1)).descontarStock("SKU-001", 2);
+        verify(inventarioClient, times(1)).descontarStock("SKU-002", 1);
+    }
+
+    @Test
+    void debeLanzarExcepcionCuandoStockEsInsuficiente() {
+        productoResponse.setStockActual(1); // sólo hay 1, se piden 2
+
+        when(pedidoFactory.toEntity(pedidoDTO)).thenReturn(pedidoEntity);
+        when(inventarioClient.obtenerProducto("SKU-001")).thenReturn(productoResponse);
+
+        assertThrows(RuntimeException.class, () -> pedidoService.crearPedido(pedidoDTO));
+
+        verify(inventarioClient, never()).descontarStock(anyString(), anyInt());
+        verify(pedidoRepository, never()).save(any());
     }
 
     // ── VALIDACIONES ──────────────────────────────────────────────────────────
@@ -131,7 +167,6 @@ class PedidoServiceImplTest {
         assertThrows(IllegalArgumentException.class,
                 () -> pedidoService.crearPedido(pedidoDTO));
 
-        // El inventario nunca debería ser consultado
         verifyNoInteractions(inventarioClient);
     }
 
@@ -149,7 +184,6 @@ class PedidoServiceImplTest {
 
     @Test
     void debeFallbackGuardarPedidoComoFallidoCuandoInventarioCae() {
-        // Arrange: simulamos que ms-inventario está caído
         RuntimeException inventarioCaido = new RuntimeException("Connection refused");
 
         PedidoItem itemEntity = new PedidoItem();
@@ -165,22 +199,29 @@ class PedidoServiceImplTest {
         fallbackDTO.setMensaje("El servicio de inventario no está disponible. Pedido registrado como FALLIDO.");
         when(pedidoFactory.toDTO(any())).thenReturn(fallbackDTO);
 
-        // Act: llamamos directamente al método fallback
         PedidoDTO resultado = pedidoService.crearPedidoFallback(pedidoDTO, inventarioCaido);
 
-        // Assert
         assertEquals("FALLIDO", resultado.getEstado());
         assertNotNull(resultado.getMensaje());
-
-        // El evento NO debe publicarse en fallback
         verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void debeFallbackConItemsNulos() {
+        pedidoDTO.setItems(null);
+        RuntimeException t = new RuntimeException("error");
+
+        when(pedidoFactory.toEntity(pedidoDTO)).thenReturn(pedidoEntity);
+        when(pedidoRepository.save(any())).thenReturn(pedidoEntity);
+        when(pedidoFactory.toDTO(any())).thenReturn(new PedidoDTO());
+
+        assertDoesNotThrow(() -> pedidoService.crearPedidoFallback(pedidoDTO, t));
     }
 
     // ── EVENTO RABBITMQ ───────────────────────────────────────────────────────
 
     @Test
     void debePublicarEventoConDatosCorrectosDelPedido() {
-        // Arrange
         PedidoItem itemEntity = new PedidoItem();
         itemEntity.setSkuProducto("SKU-001");
         itemEntity.setCantidad(2);
@@ -195,10 +236,8 @@ class PedidoServiceImplTest {
         when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedidoEntity);
         when(pedidoFactory.toDTO(any())).thenReturn(new PedidoDTO());
 
-        // Act
         pedidoService.crearPedido(pedidoDTO);
 
-        // Assert: capturar el evento publicado y verificar sus datos
         ArgumentCaptor<PedidoCreadoEvent> captor = ArgumentCaptor.forClass(PedidoCreadoEvent.class);
         verify(eventPublisher).publicarPedidoCreado(captor.capture());
 
@@ -207,5 +246,18 @@ class PedidoServiceImplTest {
         assertEquals("SKU-001", eventoPublicado.getSkuProducto());
         assertEquals(2, eventoPublicado.getCantidad());
         assertEquals("COMPLETADO", eventoPublicado.getEstado());
+    }
+
+    // ── LISTAR PEDIDOS ────────────────────────────────────────────────────────
+
+    @Test
+    void debeListarPedidosCorrectamente() {
+        when(pedidoRepository.findAll()).thenReturn(List.of(pedidoEntity));
+        when(pedidoFactory.toDTO(pedidoEntity)).thenReturn(pedidoDTO);
+
+        List<PedidoDTO> lista = pedidoService.listarPedidos();
+
+        assertEquals(1, lista.size());
+        verify(pedidoRepository, times(1)).findAll();
     }
 }

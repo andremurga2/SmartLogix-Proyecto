@@ -1,8 +1,10 @@
 package com.smartlogix.inventario.event;
 
+import com.smartlogix.inventario.service.ProductoService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -33,6 +35,15 @@ class PedidoCreadoListenerTest {
     void debeProcessarEventoConDatosNulos() {
         PedidoCreadoEvent event = new PedidoCreadoEvent(
                 null, null, null, null, null);
+
+        assertDoesNotThrow(() -> listener.onPedidoCreado(event));
+    }
+
+    @Test
+    void debeLoguearAuditCuandoEstadoEsCompletado() {
+        // Verifica que el branch "COMPLETADO" se ejecuta sin error
+        PedidoCreadoEvent event = new PedidoCreadoEvent(
+                10L, "SKU-010", 3, "PAYPAL-DEF", "COMPLETADO");
 
         assertDoesNotThrow(() -> listener.onPedidoCreado(event));
     }

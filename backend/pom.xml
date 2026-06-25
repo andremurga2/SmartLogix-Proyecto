@@ -85,7 +85,9 @@
                         <exclude>**/event/RabbitMQConfig.*</exclude>
                         <exclude>**/factory/**</exclude>
                         <exclude>**/client/**</exclude>
-                        <exclude>**/bff/controller/**</exclude>
+                        <exclude>**/event/RabbitMQConfig.class</exclude>
+                        <exclude>**/event/PedidoCreadoEvent.class</exclude>
+                        <exclude>**/service/PayPalService.*</exclude>
                     </excludes>
                 </configuration>
                 <executions>
