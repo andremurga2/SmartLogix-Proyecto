@@ -1,0 +1,932 @@
+openapi: 3.0.3
+info:
+  title: SmartLogix API
+  description: |
+    Documentación completa de los endpoints REST del sistema SmartLogix.
+    La arquitectura consta de un **BFF** (puerto 8080) como único punto de entrada
+    para el frontend, más tres microservicios internos:
+    - **ms-auth** (puerto 8083) — autenticación JWT y gestión de usuarios
+    - **ms-inventario** (puerto 8081) — catálogo de productos y stock
+    - **ms-pedidos** (puerto 8082) — registro y consulta de pedidos
+
+    > El frontend **sólo debe comunicarse con el BFF**. Los microservicios internos
+    > no deben exponerse directamente al exterior.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: BFF — punto de entrada principal
+  - url: http://localhost:8083
+    description: ms-auth (interno / pruebas)
+  - url: http://localhost:8081
+    description: ms-inventario (interno / pruebas)
+  - url: http://localhost:8082
+    description: ms-pedidos (interno / pruebas)
+
+tags:
+  - name: BFF — Autenticación
+    description: Login, registro y validación de tokens
+  - name: BFF — Tienda
+    description: Catálogo público y compra
+  - name: BFF — Admin Productos
+    description: CRUD de productos — requiere rol ADMIN
+  - name: BFF — Admin Pedidos
+    description: Consulta de pedidos — requiere rol ADMIN
+  - name: BFF — Admin Usuarios
+    description: CRUD de usuarios — requiere rol ADMIN
+  - name: BFF — Pagos PayPal
+    description: Creación y captura de órdenes PayPal
+  - name: ms-auth
+    description: Endpoints directos del microservicio de autenticación (puerto 8083)
+  - name: ms-inventario
+    description: Endpoints directos del microservicio de inventario (puerto 8081)
+  - name: ms-pedidos
+    description: Endpoints directos del microservicio de pedidos (puerto 8082)
+
+paths:
+
+  # ── BFF: Autenticación ─────────────────────────────────────────────────────
+
+  /api/auth/login:
+    post:
+      tags: [BFF — Autenticación]
+      summary: Iniciar sesión
+      description: Valida credenciales y devuelve un JWT. Base URL BFF → http://localhost:8080
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              username: admin
+              password: admin123
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                success: true
+                message: Login exitoso
+                token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJBRE1JTiJ9.abc123
+                username: admin
+                role: ADMIN
+        '401':
+          description: Credenciales inválidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                success: false
+                message: Usuario o contraseña inválidos
+
+  /api/auth/validate:
+    get:
+      tags: [BFF — Autenticación]
+      summary: Validar token JWT
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Token válido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateResponse'
+              example:
+                valid: true
+                username: admin
+                role: ADMIN
+                message: Token válido
+        '401':
+          description: Token inválido o ausente
+
+  /api/auth/registro:
+    post:
+      tags: [BFF — Autenticación]
+      summary: Registro público de usuario
+      description: Crea un nuevo usuario con rol USER forzado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioRegistroRequest'
+            example:
+              username: juan.perez
+              password: miPassword123
+      responses:
+        '200':
+          description: Usuario creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioDTO'
+        '400':
+          description: El usuario ya existe o datos inválidos
+
+  # ── BFF: Tienda ────────────────────────────────────────────────────────────
+
+  /api/store/catalogo:
+    get:
+      tags: [BFF — Tienda]
+      summary: Obtener catálogo de productos
+      description: Devuelve todos los productos. No requiere autenticación.
+      responses:
+        '200':
+          description: Lista de productos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductoDTO'
+              example:
+                - sku: PROD-001
+                  nombre: Laptop Pro 15
+                  descripcion: Laptop de alto rendimiento
+                  precio: 1299.99
+                  stock: 10
+
+  /api/store/comprar:
+    post:
+      tags: [BFF — Tienda]
+      summary: Realizar una compra
+      description: Registra un pedido y descuenta stock. Requiere JWT válido.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PedidoRequest'
+            example:
+              items:
+                - skuProducto: PROD-001
+                  cantidad: 2
+      responses:
+        '200':
+          description: Pedido creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoDTO'
+        '401':
+          description: Token inválido o ausente
+
+  # ── BFF: Admin — Productos ─────────────────────────────────────────────────
+
+  /api/admin/productos:
+    post:
+      tags: [BFF — Admin Productos]
+      summary: Crear producto
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoDTO'
+            example:
+              sku: PROD-003
+              nombre: Teclado Mecánico
+              descripcion: Teclado RGB switches blue
+              precio: 89.99
+              stock: 25
+      responses:
+        '200':
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoDTO'
+        '403':
+          description: Acceso denegado — se requiere rol ADMIN
+
+  /api/admin/productos/{sku}:
+    put:
+      tags: [BFF — Admin Productos]
+      summary: Actualizar producto
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+          example: PROD-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoDTO'
+      responses:
+        '200':
+          description: Producto actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoDTO'
+        '403':
+          description: Acceso denegado
+    delete:
+      tags: [BFF — Admin Productos]
+      summary: Eliminar producto
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+          example: PROD-001
+      responses:
+        '204':
+          description: Producto eliminado
+        '403':
+          description: Acceso denegado
+
+  # ── BFF: Admin — Pedidos ───────────────────────────────────────────────────
+
+  /api/admin/pedidos:
+    get:
+      tags: [BFF — Admin Pedidos]
+      summary: Listar todos los pedidos
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de pedidos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PedidoDTO'
+        '403':
+          description: Acceso denegado
+
+  # ── BFF: Admin — Usuarios ──────────────────────────────────────────────────
+
+  /api/admin/usuarios:
+    get:
+      tags: [BFF — Admin Usuarios]
+      summary: Listar usuarios
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de usuarios sin contraseña
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UsuarioDTO'
+        '403':
+          description: Acceso denegado
+    post:
+      tags: [BFF — Admin Usuarios]
+      summary: Crear usuario (admin)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioAdminRequest'
+            example:
+              username: operador1
+              password: pass123
+              role: USER
+              activo: true
+      responses:
+        '200':
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioDTO'
+        '403':
+          description: Acceso denegado
+
+  /api/admin/usuarios/{id}:
+    put:
+      tags: [BFF — Admin Usuarios]
+      summary: Actualizar usuario
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          example: 3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioAdminRequest'
+      responses:
+        '200':
+          description: Usuario actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioDTO'
+        '403':
+          description: Acceso denegado
+    delete:
+      tags: [BFF — Admin Usuarios]
+      summary: Eliminar usuario
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          example: 3
+      responses:
+        '204':
+          description: Usuario eliminado
+        '403':
+          description: Acceso denegado
+
+  # ── BFF: Pagos PayPal ──────────────────────────────────────────────────────
+
+  /api/pagos/crear-orden:
+    post:
+      tags: [BFF — Pagos PayPal]
+      summary: Crear orden PayPal (Paso 1)
+      description: Crea la orden en PayPal y devuelve la URL de aprobación.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearOrdenRequest'
+            example:
+              moneda: USD
+              items:
+                - skuProducto: PROD-001
+                  cantidad: 2
+      responses:
+        '200':
+          description: Orden creada en PayPal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrearOrdenResponse'
+              example:
+                orderId: 7GH12345XY
+                approveUrl: https://www.sandbox.paypal.com/checkoutnow?token=7GH12345XY
+                status: CREATED
+        '400':
+          description: Datos inválidos
+        '500':
+          description: Error al comunicarse con PayPal
+
+  /api/pagos/capturar-orden:
+    post:
+      tags: [BFF — Pagos PayPal]
+      summary: Capturar orden PayPal (Paso 2)
+      description: Captura el pago aprobado y registra el pedido en ms-pedidos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapturarOrdenRequest'
+            example:
+              orderId: 7GH12345XY
+              items:
+                - skuProducto: PROD-001
+                  cantidad: 2
+      responses:
+        '200':
+          description: Pago capturado y pedido registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagoResponse'
+        '400':
+          description: Pago no completado
+        '500':
+          description: Error al capturar el pago
+
+  /api/pagos/webhook:
+    post:
+      tags: [BFF — Pagos PayPal]
+      summary: Webhook PayPal
+      description: Recibe notificaciones de eventos de PayPal. Requiere URL pública HTTPS.
+      parameters:
+        - name: Paypal-Transmission-Id
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook recibido
+
+  # ── ms-auth (directo, puerto 8083) ─────────────────────────────────────────
+
+  /api/auth/internal/login:
+    post:
+      tags: [ms-auth]
+      summary: Login directo ms-auth (puerto 8083)
+      description: "Endpoint interno. URL: http://localhost:8083/api/auth/login"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Credenciales inválidas
+
+  /api/auth/internal/validate:
+    get:
+      tags: [ms-auth]
+      summary: Validar token directo ms-auth (puerto 8083)
+      description: "Endpoint interno usado por el BFF vía Feign. URL: http://localhost:8083/api/auth/validate"
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Token válido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateResponse'
+        '401':
+          description: Token inválido
+
+  /api/auth/internal/usuarios:
+    get:
+      tags: [ms-auth]
+      summary: Listar usuarios directo ms-auth (puerto 8083)
+      description: "URL: http://localhost:8083/api/auth/usuarios"
+      responses:
+        '200':
+          description: Lista de usuarios
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UsuarioDTO'
+    post:
+      tags: [ms-auth]
+      summary: Crear usuario directo ms-auth (puerto 8083)
+      description: "URL: http://localhost:8083/api/auth/usuarios"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioAdminRequest'
+      responses:
+        '200':
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioDTO'
+        '400':
+          description: El usuario ya existe
+
+  /api/auth/internal/usuarios/{id}:
+    put:
+      tags: [ms-auth]
+      summary: Actualizar usuario directo ms-auth (puerto 8083)
+      description: "URL: http://localhost:8083/api/auth/usuarios/{id}"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioAdminRequest'
+      responses:
+        '200':
+          description: Usuario actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioDTO'
+    delete:
+      tags: [ms-auth]
+      summary: Eliminar usuario directo ms-auth (puerto 8083)
+      description: "URL: http://localhost:8083/api/auth/usuarios/{id}"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Usuario eliminado
+        '400':
+          description: Usuario no encontrado
+
+  /api/auth/internal/registro:
+    post:
+      tags: [ms-auth]
+      summary: Registro público directo ms-auth (puerto 8083)
+      description: "URL: http://localhost:8083/api/auth/registro"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioRegistroRequest'
+      responses:
+        '200':
+          description: Usuario registrado con rol USER
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioDTO'
+
+  # ── ms-inventario (directo, puerto 8081) ───────────────────────────────────
+
+  /api/inventario/productos:
+    get:
+      tags: [ms-inventario]
+      summary: Listar productos (puerto 8081)
+      responses:
+        '200':
+          description: Lista de productos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductoDTO'
+    post:
+      tags: [ms-inventario]
+      summary: Crear producto (puerto 8081)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoDTO'
+            example:
+              sku: PROD-010
+              nombre: Monitor 27"
+              descripcion: Monitor 4K IPS
+              precio: 349.99
+              stock: 15
+      responses:
+        '201':
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoDTO'
+
+  /api/inventario/productos/{sku}:
+    get:
+      tags: [ms-inventario]
+      summary: Obtener producto por SKU (puerto 8081)
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+          example: PROD-001
+      responses:
+        '200':
+          description: Producto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoDTO'
+    put:
+      tags: [ms-inventario]
+      summary: Actualizar producto (puerto 8081)
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoDTO'
+      responses:
+        '200':
+          description: Producto actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoDTO'
+    delete:
+      tags: [ms-inventario]
+      summary: Eliminar producto (puerto 8081)
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Producto eliminado
+
+  /api/inventario/productos/{sku}/descontar-stock:
+    put:
+      tags: [ms-inventario]
+      summary: Descontar stock (puerto 8081)
+      description: Llamado internamente por el BFF al procesar una compra.
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+          example: PROD-001
+        - name: cantidad
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 2
+      responses:
+        '204':
+          description: Stock descontado
+
+  # ── ms-pedidos (directo, puerto 8082) ──────────────────────────────────────
+
+  /api/pedidos:
+    post:
+      tags: [ms-pedidos]
+      summary: Crear pedido (puerto 8082)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PedidoRequest'
+            example:
+              items:
+                - skuProducto: PROD-001
+                  cantidad: 1
+              paypalOrderId: 7GH12345XY
+      responses:
+        '200':
+          description: Pedido creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoDTO'
+    get:
+      tags: [ms-pedidos]
+      summary: Listar pedidos (puerto 8082)
+      responses:
+        '200':
+          description: Lista de pedidos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PedidoDTO'
+
+# ══════════════════════════════════════════════════════════════════════════════
+# COMPONENTS
+# ══════════════════════════════════════════════════════════════════════════════
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtenido en POST /api/auth/login
+
+  schemas:
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: admin
+        password:
+          type: string
+          example: admin123
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        token:
+          type: string
+          nullable: true
+        username:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+          enum: [ADMIN, USER]
+
+    ValidateResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        username:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+        message:
+          type: string
+
+    UsuarioDTO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, USER]
+        activo:
+          type: boolean
+
+    UsuarioRegistroRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: nuevo.usuario
+        password:
+          type: string
+          example: password123
+
+    UsuarioAdminRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, USER]
+        activo:
+          type: boolean
+
+    ProductoDTO:
+      type: object
+      properties:
+        sku:
+          type: string
+          example: PROD-001
+        nombre:
+          type: string
+          example: Laptop Pro 15
+        descripcion:
+          type: string
+        precio:
+          type: number
+          format: double
+          example: 1299.99
+        stock:
+          type: integer
+          example: 10
+
+    PedidoItemDTO:
+      type: object
+      properties:
+        skuProducto:
+          type: string
+          example: PROD-001
+        cantidad:
+          type: integer
+          example: 2
+
+    PedidoRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PedidoItemDTO'
+        paypalOrderId:
+          type: string
+          nullable: true
+
+    PedidoDTO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        paypalOrderId:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PedidoItemDTO'
+
+    CrearOrdenRequest:
+      type: object
+      properties:
+        moneda:
+          type: string
+          default: USD
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PedidoItemDTO'
+
+    CrearOrdenResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+        approveUrl:
+          type: string
+        status:
+          type: string
+
+    CapturarOrdenRequest:
+      type: object
+      properties:
+        orderId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PedidoItemDTO'
+
+    PagoResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        orderId:
+          type: string
+        status:
+          type: string
+        pedido:
+          $ref: '#/components/schemas/PedidoDTO'
+          nullable: true
