@@ -28,3 +28,21 @@ mvn clean test
 - **Circuit Breaker**: Manejo de fallos en llamadas de red (Resilience4j).
 - **Repository**: Persistencia de Pedidos.
 - **Dependency Injection**: Inversión de control con Spring Boot.
+
+## Decisión de diseño: Acoplamiento síncrono con ms-inventario
+
+`ms-pedidos` llama a `ms-inventario` de forma **síncrona vía HTTP** (Feign Client)
+para obtener el precio del producto y descontar el stock antes de confirmar el pedido.
+
+**¿Por qué no es async puro?**
+El descuento de stock debe ocurrir *antes* de confirmar al usuario que el pago fue aceptado.
+Si usáramos mensajería async, el usuario recibiría confirmación y el stock podría no estar
+disponible todavía, generando inconsistencias.
+
+**Temporal coupling mitigado con Circuit Breaker:**
+Se usa **Resilience4j** con `@CircuitBreaker(name = "inventarioCB")`.
+Si ms-inventario no responde, el método `crearPedidoFallback` guarda el pedido
+como `ESTADO = "FALLIDO"` en vez de lanzar un error 500 al usuario.
+
+**Referencia en clase:** PDF ipc_v2 — Temporal Coupling y patrón de
+"responde primero, procesa después".
