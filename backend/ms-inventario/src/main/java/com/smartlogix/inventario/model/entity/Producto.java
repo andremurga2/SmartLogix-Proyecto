@@ -33,4 +33,7 @@ public class Producto {
 
     @Column(nullable = false)
     private Integer stockActual;
+
+    @Column
+    private String imagenUrl;
 }

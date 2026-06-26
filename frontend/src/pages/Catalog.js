@@ -4,6 +4,8 @@ import CartModal from '../components/CartModal';
 import { api } from '../services/api';
 import { useCart } from '../context/CartContext';
 
+const PRODUCTOS_POR_PAGINA = 8;
+
 const Catalog = () => {
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11,6 +13,10 @@ const Catalog = () => {
 
   const [showCart, setShowCart] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  const [busqueda, setBusqueda] = useState('');
+  const [soloDisponibles, setSoloDisponibles] = useState(false);
+  const [paginaActual, setPaginaActual] = useState(1);
 
   const { cantidadTotal } = useCart();
 
@@ -37,6 +43,27 @@ const Catalog = () => {
     fetchCatalogo();
     setTimeout(() => setSuccessMsg(''), 5000);
   };
+
+  const productosFiltrados = productos.filter(p => {
+    const termino = busqueda.toLowerCase();
+    const coincide = p.nombre.toLowerCase().includes(termino) || p.sku.toLowerCase().includes(termino);
+    const disponible = soloDisponibles ? p.disponible && p.stockActual > 0 : true;
+    return coincide && disponible;
+  });
+
+  const totalPaginas = Math.ceil(productosFiltrados.length / PRODUCTOS_POR_PAGINA);
+  const inicio = (paginaActual - 1) * PRODUCTOS_POR_PAGINA;
+  const productosPagina = productosFiltrados.slice(inicio, inicio + PRODUCTOS_POR_PAGINA);
+
+  const cambiarPagina = (pagina) => {
+    setPaginaActual(pagina);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Resetear página al cambiar filtros
+  useEffect(() => {
+    setPaginaActual(1);
+  }, [busqueda, soloDisponibles]);
 
   return (
     <div>
@@ -65,11 +92,56 @@ const Catalog = () => {
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h2>Productos Disponibles</h2>
           <button className="btn-secondary" onClick={fetchCatalogo}>
             <i className="ri-refresh-line"></i> Actualizar
           </button>
+        </div>
+
+        {/* ── Barra de búsqueda y filtros ── */}
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+            <i className="ri-search-line" style={{
+              position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--text-muted)', fontSize: '1.1rem'
+            }}></i>
+            <input
+              type="text"
+              placeholder="Buscar por nombre o SKU..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              style={{
+                width: '100%', padding: '0.65rem 1rem 0.65rem 2.25rem',
+                borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
+                background: 'rgba(255,255,255,0.07)', color: 'var(--text-bright)',
+                fontSize: '0.95rem', boxSizing: 'border-box', outline: 'none',
+              }}
+            />
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            <input
+              type="checkbox"
+              checked={soloDisponibles}
+              onChange={(e) => setSoloDisponibles(e.target.checked)}
+              style={{ width: 16, height: 16, cursor: 'pointer' }}
+            />
+            Solo disponibles
+          </label>
+
+          {(busqueda || soloDisponibles) && (
+            <button
+              onClick={() => { setBusqueda(''); setSoloDisponibles(false); }}
+              style={{
+                background: 'none', border: '1px solid rgba(255,255,255,0.2)',
+                color: 'var(--text-muted)', borderRadius: 8, padding: '0.65rem 1rem',
+                cursor: 'pointer', fontSize: '0.85rem'
+              }}
+            >
+              <i className="ri-close-line"></i> Limpiar
+            </button>
+          )}
         </div>
 
         {loading ? (
@@ -77,18 +149,71 @@ const Catalog = () => {
             <i className="ri-loader-4-line spin" style={{ fontSize: '3rem', color: 'var(--primary)' }}></i>
             <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>Cargando catálogo desde el BFF...</p>
           </div>
-        ) : productos.length === 0 ? (
+        ) : productosFiltrados.length === 0 ? (
           <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>
-            <i className="ri-inbox-line" style={{ fontSize: '3rem', color: 'var(--text-muted)' }}></i>
-            <h3 style={{ margin: '1rem 0' }}>Inventario Vacío</h3>
-            <p className="product-desc">No hay productos disponibles en este momento.</p>
+            <i className="ri-search-line" style={{ fontSize: '3rem', color: 'var(--text-muted)' }}></i>
+            <h3 style={{ margin: '1rem 0' }}>
+              {productos.length === 0 ? 'Inventario Vacío' : 'Sin resultados'}
+            </h3>
+            <p className="product-desc">
+              {productos.length === 0
+                ? 'No hay productos disponibles en este momento.'
+                : `No se encontraron productos para "${busqueda}".`}
+            </p>
           </div>
         ) : (
-          <div className="grid grid-cols-4">
-            {productos.map(producto => (
-              <ProductCard key={producto.sku} producto={producto} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-4">
+              {productosPagina.map(producto => (
+                <ProductCard key={producto.sku} producto={producto} />
+              ))}
+            </div>
+
+            {/* ── Paginación ── */}
+            {totalPaginas > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginTop: '2.5rem' }}>
+                <button
+                  onClick={() => cambiarPagina(paginaActual - 1)}
+                  disabled={paginaActual === 1}
+                  style={{
+                    padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(255,255,255,0.07)', color: paginaActual === 1 ? 'var(--text-muted)' : 'var(--text-bright)',
+                    cursor: paginaActual === 1 ? 'not-allowed' : 'pointer', fontSize: '0.9rem'
+                  }}
+                >
+                  <i className="ri-arrow-left-s-line"></i>
+                </button>
+
+                {Array.from({ length: totalPaginas }, (_, i) => i + 1).map(pagina => (
+                  <button
+                    key={pagina}
+                    onClick={() => cambiarPagina(pagina)}
+                    style={{
+                      padding: '0.5rem 0.9rem', borderRadius: 8,
+                      border: pagina === paginaActual ? 'none' : '1px solid rgba(255,255,255,0.15)',
+                      background: pagina === paginaActual ? 'var(--primary)' : 'rgba(255,255,255,0.07)',
+                      color: 'var(--text-bright)', cursor: 'pointer',
+                      fontWeight: pagina === paginaActual ? 700 : 400, fontSize: '0.9rem'
+                    }}
+                  >
+                    {pagina}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => cambiarPagina(paginaActual + 1)}
+                  disabled={paginaActual === totalPaginas}
+                  style={{
+                    padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(255,255,255,0.07)', color: paginaActual === totalPaginas ? 'var(--text-muted)' : 'var(--text-bright)',
+                    cursor: paginaActual === totalPaginas ? 'not-allowed' : 'pointer', fontSize: '0.9rem'
+                  }}
+                >
+                  <i className="ri-arrow-right-s-line"></i>
+                </button>
+              </div>
+            )}
+          </>
         )}
       </main>
 

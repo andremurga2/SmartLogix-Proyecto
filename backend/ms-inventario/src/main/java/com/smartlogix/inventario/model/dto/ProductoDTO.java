@@ -19,4 +19,5 @@ public class ProductoDTO {
     private BigDecimal precio;
     private Integer stockActual;
     private boolean disponible;
+    private String imagenUrl;
 }

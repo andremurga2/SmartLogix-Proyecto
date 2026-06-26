@@ -22,6 +22,7 @@ public class ProductoFactory {
                 .precio(producto.getPrecio())
                 .stockActual(producto.getStockActual())
                 .disponible(producto.getStockActual() != null && producto.getStockActual() > 0)
+                .imagenUrl(producto.getImagenUrl())
                 .build();
     }
 
@@ -35,6 +36,7 @@ public class ProductoFactory {
                 .descripcion(dto.getDescripcion())
                 .precio(dto.getPrecio())
                 .stockActual(dto.getStockActual() != null ? dto.getStockActual() : 0)
+                .imagenUrl(dto.getImagenUrl())
                 .build();
     }
 }

@@ -53,6 +53,7 @@ public class ProductoServiceImpl implements ProductoService {
         producto.setDescripcion(productoDTO.getDescripcion());
         producto.setPrecio(productoDTO.getPrecio());
         producto.setStockActual(productoDTO.getStockActual());
+        producto.setImagenUrl(productoDTO.getImagenUrl()); // ← falta esta línea
         return productoFactory.toDTO(productoRepository.save(producto));
     }
 

@@ -18,14 +18,26 @@ const ProductCard = ({ producto }) => {
     <div className="product-card glass-panel">
       <div
         className="product-image-placeholder"
-        style={{ background: getGradient(producto.sku) }}
+        style={!producto.imagenUrl ? { background: getGradient(producto.sku) } : {}}
       >
-        <i className="ri-box-3-line product-icon"></i>
+        {producto.imagenUrl ? (
+          <img
+            src={producto.imagenUrl}
+            alt={producto.nombre}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            onError={(e) => {
+              e.target.style.display = 'none';
+              e.target.parentNode.style.background = getGradient(producto.sku);
+            }}
+          />
+        ) : (
+          <i className="ri-box-3-line product-icon"></i>
+        )}
         <div className="product-badge">
           {isOutOfStock ? (
             <span className="badge badge-danger">Agotado</span>
           ) : (
-            <span className="badge badge-success">En Stock: {producto.stockActual}</span>
+            <span className="badge badge-success">Disponible</span>
           )}
         </div>
       </div>

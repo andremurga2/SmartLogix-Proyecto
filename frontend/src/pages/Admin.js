@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import '../styles/Admin.css';
 
-const EMPTY_PRODUCTO = { sku: '', nombre: '', descripcion: '', precio: '', stockActual: 0 };
+const EMPTY_PRODUCTO = { sku: '', nombre: '', descripcion: '', precio: '', stockActual: 0, imagenUrl: '' };
 const EMPTY_USUARIO = { username: '', password: '', role: 'USER', activo: true };
 
 const Admin = () => {
@@ -66,7 +66,7 @@ const Admin = () => {
     const abrirCrear = () => { setForm(EMPTY_PRODUCTO); setEditando(false); setShowModal(true); };
 
     const abrirEditar = (p) => {
-        setForm({ sku: p.sku, nombre: p.nombre, descripcion: p.descripcion, precio: p.precio, stockActual: p.stockActual });
+        setForm({ sku: p.sku, nombre: p.nombre, descripcion: p.descripcion, precio: p.precio, stockActual: p.stockActual, imagenUrl: p.imagenUrl || '' });
         setEditando(true);
         setShowModal(true);
     };
@@ -194,13 +194,19 @@ const Admin = () => {
                             <div className="table-container">
                                 <table className="admin-table">
                                     <thead>
-                                        <tr><th>SKU</th><th>Nombre</th><th>Precio</th><th>Stock</th><th>Disponible</th><th>Acciones</th></tr>
+                                        <tr><th>Imagen</th><th>SKU</th><th>Nombre</th><th>Precio</th><th>Stock</th><th>Disponible</th><th>Acciones</th></tr>
                                     </thead>
                                     <tbody>
                                         {productos.length === 0 ? (
-                                            <tr><td colSpan="6" className="empty-cell">No hay productos</td></tr>
+                                            <tr><td colSpan="7" className="empty-cell">No hay productos</td></tr>
                                         ) : productos.map(p => (
                                             <tr key={p.sku}>
+                                                <td>
+                                                    {p.imagenUrl
+                                                        ? <img src={p.imagenUrl} alt={p.nombre} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6 }} />
+                                                        : <span style={{ fontSize: 24 }}>📦</span>
+                                                    }
+                                                </td>
                                                 <td><code>{p.sku}</code></td>
                                                 <td>{p.nombre}</td>
                                                 <td>${parseFloat(p.precio).toFixed(2)}</td>
@@ -304,12 +310,26 @@ const Admin = () => {
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
                     <div style={{ background: '#fff', borderRadius: 12, padding: 32, width: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
                         <h2 style={{ marginBottom: 20 }}>{editando ? '✏️ Editar Producto' : '➕ Nuevo Producto'}</h2>
+
+                        {/* Preview de imagen */}
+                        {form.imagenUrl && (
+                            <div style={{ marginBottom: 16, textAlign: 'center' }}>
+                                <img
+                                    src={form.imagenUrl}
+                                    alt="Preview"
+                                    style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 8, border: '1px solid #ddd' }}
+                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                />
+                            </div>
+                        )}
+
                         {[
                             { label: 'SKU *', name: 'sku', type: 'text', disabled: editando },
                             { label: 'Nombre *', name: 'nombre', type: 'text' },
                             { label: 'Descripción', name: 'descripcion', type: 'text' },
                             { label: 'Precio (USD) *', name: 'precio', type: 'number' },
                             { label: 'Stock', name: 'stockActual', type: 'number' },
+                            { label: 'URL Imagen', name: 'imagenUrl', type: 'text' },
                         ].map(({ label, name, type, disabled }) => (
                             <div key={name} style={{ marginBottom: 14 }}>
                                 <label style={{ display: 'block', marginBottom: 4, fontWeight: 600, fontSize: 13 }}>{label}</label>
@@ -319,6 +339,7 @@ const Admin = () => {
                                     value={form[name]}
                                     onChange={handleFormChange}
                                     disabled={disabled}
+                                    placeholder={name === 'imagenUrl' ? 'https://ejemplo.com/imagen.jpg' : ''}
                                     style={{ width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 6, fontSize: 14, boxSizing: 'border-box', background: disabled ? '#f5f5f5' : '#fff' }}
                                 />
                             </div>
