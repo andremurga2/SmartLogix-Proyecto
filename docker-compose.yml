@@ -190,6 +190,18 @@ services:
       - bff
     networks:
       - smartlogix-network
+# ─── SWAGGER UI (multi-spec) ─────────────────────────────────────────────
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    container_name: smartlogix-swagger
+    ports:
+      - "8091:8080"
+    environment:
+      - URLS=[{"url":"http://localhost:9090/v3/api-docs","name":"BFF"},{"url":"http://localhost:8083/v3/api-docs","name":"ms-auth"},{"url":"http://localhost:8081/v3/api-docs","name":"ms-inventario"},{"url":"http://localhost:8082/v3/api-docs","name":"ms-pedidos"}]
+    networks:
+      - smartlogix-network
+    depends_on:
+      - bff
 
 networks:
   smartlogix-network:

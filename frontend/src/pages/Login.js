@@ -19,7 +19,6 @@ const Login = () => {
             const data = await api.login({ username, password });
 
             if (data.success) {
-                // Guardar datos en localStorage (incluye JWT)
                 localStorage.setItem('user', JSON.stringify({
                     username: data.username,
                     role: data.role,
@@ -29,7 +28,6 @@ const Login = () => {
                     localStorage.setItem('token', data.token);
                 }
 
-                // Redirigir según el rol
                 if (data.role === 'ADMIN') {
                     navigate('/admin');
                 } else {
@@ -44,13 +42,6 @@ const Login = () => {
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleDemoLogin = (role) => {
-        const demoUser = role === 'admin' ? 'admin' : 'user1';
-        const demoPassword = role === 'admin' ? 'admin123' : 'password123';
-        setUsername(demoUser);
-        setPassword(demoPassword);
     };
 
     return (
@@ -90,27 +81,10 @@ const Login = () => {
                         {loading ? 'Cargando...' : 'Iniciar Sesión'}
                     </button>
                 </form>
-                 <p style={{ textAlign: 'center', margin: '15px 0', fontSize: '0.9em', color: '#666' }}>
+
+                <p style={{ textAlign: 'center', margin: '15px 0', fontSize: '0.9em', color: '#666' }}>
                     ¿No tienes cuenta? <Link to="/register" style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none' }}>Regístrate aquí</Link>
                 </p>
-
-                <div className="demo-section">
-                    <p>Prueba con:</p>
-                    <button
-                        type="button"
-                        className="btn-demo admin"
-                        onClick={() => handleDemoLogin('admin')}
-                    >
-                        Admin (admin / admin123)
-                    </button>
-                    <button
-                        type="button"
-                        className="btn-demo user"
-                        onClick={() => handleDemoLogin('user')}
-                    >
-                        Usuario (user1 / password123)
-                    </button>
-                </div>
             </div>
         </div>
     );

@@ -39,3 +39,9 @@ resilience4j.circuitbreaker:
       minimumNumberOfCalls: 3
       waitDurationInOpenState: 10s
       failureRateThreshold: 50
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

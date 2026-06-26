@@ -24,3 +24,5 @@ COPY --from=builder /app/bff/target/*.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
 
+
+

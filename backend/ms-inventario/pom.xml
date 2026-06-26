@@ -15,6 +15,10 @@
     <description>Microservicio para gestionar el inventario de SmartLogix</description>
 
     <dependencies>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
         <!-- RabbitMQ -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -26,3 +26,9 @@ jwt:
 logging:
   level:
     com.smartlogix.auth: DEBUG
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
