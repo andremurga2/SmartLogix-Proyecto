@@ -1,6 +1,6 @@
 # 📦 SmartLogix — E-Commerce con Microservicios
 
-> **Duoc UC · Desarrollo FullStack III · Mayo 2026**  
+> **Duoc UC · Desarrollo FullStack III **  
 > Arquitectura híbrida: Spring Boot 3 + React 18 + PostgreSQL 15 + RabbitMQ + Docker
 
 ---
@@ -24,45 +24,57 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                     CLIENTE (Navegador)                              │
+│                     CLIENTE (Navegador)                               │
 │               http://localhost:3000  (React SPA)                     │
-│    Carrito gestionado en estado React (sin backend, latencia cero)   │
+│   Carrito en CartContext, persistido en localStorage (sin backend)   │
 └─────────────────────────┬────────────────────────────────────────────┘
-                          │ HTTP REST + JWT (Bearer Token)
-                          ▼
+                           │ HTTP REST + JWT (Bearer Token)
+                           ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │           BFF / API Gateway  :9090  (Spring Boot)                    │
 │  • Enruta requests a los microservicios internos                     │
 │  • Valida JWT consultando ms-auth antes de rutas protegidas          │
 │  • Integra PayPal (crear orden / capturar / webhook)                 │
-└───────────┬─────────────────┬──────────────────┬────────────────────┘
+│  • Expone rutas /admin/* (productos, pedidos, usuarios)              │
+└───────────┬─────────────────┬──────────────────┬─────────────────────┘
             │ Feign           │ Feign            │ Feign
             ▼                 ▼                  ▼
-┌───────────────────┐  ┌──────────────────┐  ┌──────────────────────┐
-│  ms-auth  :8083   │  │ ms-inventario    │  │  ms-pedidos  :8082   │
-│  Spring Boot      │  │ :8081            │  │  Spring Boot +       │
-│  • Valida usuario │  │  Spring Boot     │  │  Resilience4j        │
-│  • Emite JWT      │  │  • CRUD productos│  │  • Crear pedidos     │
-│  • Verifica token │  │  • Stock en      │  │  • Circuit Breaker   │
-│  • Usuarios en    │  │    tiempo real   │  │  • Publica eventos   │
-│    memoria        │  │  • DataSeeder    │  │    RabbitMQ          │
-└───────────────────┘  │  • Consume       │  └──────────┬───────────┘
-                       │    eventos MQ    │             │ JPA
-                       └──────┬───────────┘             ▼
-                              │ JPA          ┌─────────────────────────┐
-                              ▼              │  PostgreSQL :5433        │
-                   ┌──────────────────────┐  │  db_pedidos              │
-                   │  PostgreSQL :5432    │  └─────────────────────────┘
-                   │  db_inventario       │
-                   └──────────────────────┘
+┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐
+│  ms-auth  :8083     │  │ ms-inventario :8081 │  │ ms-pedidos  :8082  │
+│  Spring Boot        │  │ Spring Boot          │  │ Spring Boot +      │
+│  • Login / JWT       │  │ • CRUD productos     │  │   Resilience4j     │
+│  • CRUD usuarios     │  │ • Stock en tiempo    │  │ • Crear pedidos    │
+│  • BCrypt + JPA      │  │   real               │  │ • Circuit Breaker  │
+│  • DataSeeder        │  │ • DataSeeder         │  │ • Compensa stock   │
+│                       │  │ • Consume eventos MQ │  │   (Saga) si falla  │
+└──────────┬────────────┘  └──────────┬───────────┘  │ • Publica eventos  │
+           │ JPA                      │ JPA           │   RabbitMQ         │
+           ▼                          ▼                └─────────┬──────────┘
+┌────────────────────┐    ┌────────────────────┐                 │ JPA
+│  PostgreSQL :5434   │    │  PostgreSQL :5432   │                 ▼
+│  db_auth             │    │  db_inventario      │    ┌────────────────────┐
+└────────────────────┘    └────────────────────┘    │  PostgreSQL :5433   │
+                                                        │  db_pedidos          │
+                                                        └────────────────────┘
 
-                   ┌──────────────────────────────────────────────────┐
-                   │         RabbitMQ  :5672 / UI :15672              │
-                   │         Exchange: smartlogix.exchange             │
-                   │         Queue: pedido.creado.queue                │
-                   │   ms-pedidos ──[pedido.creado]──► ms-inventario  │
-                   └──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│         RabbitMQ  :5672 / UI :15672                                   │
+│         Exchange: smartlogix.exchange · Queue: pedido.creado.queue    │
+│         ms-pedidos ──[pedido.creado]──► ms-inventario                │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│   Swagger UI consolidado  :8091                                       │
+│   Agrega /v3/api-docs de BFF + ms-auth + ms-inventario + ms-pedidos   │
+└──────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Nota:** cada microservicio tiene su propia base de datos PostgreSQL aislada
+> (patrón *Database-per-Service*): `db_auth` (:5434), `db_inventario` (:5432)
+> y `db_pedidos` (:5433). `ms-auth` **no** guarda usuarios en memoria — usa
+> JPA + `UsuarioRepository` sobre `db_auth`, con contraseñas cifradas con
+> BCrypt (`PasswordEncoderConfig`) y un `DataSeeder` que carga los usuarios
+> de prueba solo si la tabla está vacía.
 
 ### Flujo de Pago PayPal
 
@@ -86,12 +98,14 @@ ms-inventario → consume evento (auditoría / alertas stock)
 | **BFF / API Gateway** | `bff` — punto de entrada único, enrutamiento, validación JWT |
 | **Event-Driven (RabbitMQ)** | `ms-pedidos` publica `pedido.creado`; `ms-inventario` lo consume de forma asíncrona |
 | **Circuit Breaker** | `ms-pedidos → PedidoServiceImpl` con `@CircuitBreaker` (Resilience4j); fallback ante fallo de inventario |
-| **JWT (Autenticación)** | `ms-auth` emite tokens HS256; BFF los valida sin consultar BD en cada petición |
-| **Repository Pattern** | `ProductoRepository`, `PedidoRepository` (Spring Data JPA) |
+| **Saga (compensación)** | Si falla la creación del pedido tras descontar stock, `PedidoServiceImpl` llama a `/descontar-stock`... `/revertir-stock` en `ms-inventario` para devolver el stock reservado |
+| **JWT (Autenticación)** | `ms-auth` emite tokens HS256 (`JwtUtil`); BFF valida contra `ms-auth` en cada petición vía `AuthClient`; `ms-auth` además protege sus propios endpoints con `JwtAuthenticationFilter` + `SecurityConfig` |
+| **Repository Pattern** | `ProductoRepository`, `PedidoRepository`, `UsuarioRepository` (Spring Data JPA) |
 | **Factory Method** | `ProductoFactory`, `PedidoFactory` — mapeo Entidad ↔ DTO |
-| **Database-per-Service** | Cada microservicio tiene su propia BD PostgreSQL aislada |
+| **Database-per-Service** | `db_auth`, `db_inventario` y `db_pedidos` — cada microservicio con su propia BD PostgreSQL aislada |
 | **Serverless (FaaS)** | PayPal webhook `/api/pagos/webhook` — se activa solo al confirmar un pago |
-| **Carrito en Frontend** | Estado React (`useState`) — sin backend, latencia cero |
+| **Carrito en Frontend** | `CartContext` (Context API) persistido en `localStorage` — sin backend, latencia cero, sobrevive a un refresh |
+| **Custom Hook** | `useCatalogo` — extrae la lógica de carga/filtrado del catálogo fuera del componente `Catalog.js` |
 
 ---
 
@@ -110,25 +124,29 @@ SmartLogix-PayPal/
 ├── backend/
 │   ├── pom.xml                      ← POM raíz (módulos: bff, ms-auth, ms-inventario, ms-pedidos)
 │   │
-│   ├── ms-auth/                     ← 🆕 Microservicio JWT (puerto 8083)
+│   ├── ms-auth/                     ← Microservicio JWT + gestión de usuarios (puerto 8083)
 │   │   ├── Dockerfile
 │   │   ├── pom.xml
 │   │   └── src/main/java/com/smartlogix/auth/
 │   │       ├── MsAuthApplication.java
 │   │       ├── controller/AuthController.java
 │   │       ├── service/AuthService.java
+│   │       ├── repository/UsuarioRepository.java
+│   │       ├── model/entity/Usuario.java
 │   │       ├── util/JwtUtil.java
-│   │       └── model/{LoginRequest, LoginResponse, ValidateResponse}.java
+│   │       ├── security/JwtAuthenticationFilter.java
+│   │       ├── config/{SecurityConfig, PasswordEncoderConfig, CorsConfig, DataSeeder, OpenApiConfig}.java
+│   │       └── model/{LoginRequest, LoginResponse, ValidateResponse, UsuarioDTO}.java
 │   │
-│   ├── bff/                         ← API Gateway + PayPal (puerto 9090)
+│   ├── bff/                         ← API Gateway + PayPal + panel Admin (puerto 9090)
 │   │   ├── Dockerfile
 │   │   ├── pom.xml
 │   │   └── src/main/java/com/smartlogix/bff/
 │   │       ├── BffApplication.java
 │   │       ├── client/{AuthClient, InventarioClient, PedidosClient}.java
-│   │       ├── config/{CorsConfig, PayPalConfig}.java
-│   │       ├── controller/{BffController, PayPalController}.java
-│   │       └── service/{AuthService, BffService, PayPalService}.java
+│   │       ├── config/{CorsConfig, PayPalConfig, OpenApiConfig}.java
+│   │       ├── controller/{BffController, PayPalController}.java  ← BffController incluye rutas /admin/*
+│   │       └── service/{BffService, PayPalService}.java
 │   │
 │   ├── ms-inventario/               ← Inventario + consumidor RabbitMQ (puerto 8081)
 │   │   ├── Dockerfile
@@ -161,9 +179,16 @@ SmartLogix-PayPal/
     └── src/
         ├── App.js
         ├── services/api.js           ← Envía JWT en cada request
-        ├── components/{PayPalCheckout, OrderModal, ProductCard, ProtectedRoute}.js
-        └── pages/{Login, Catalog, Admin, PagoExito, PagoCancelado}.js
+        ├── hooks/useCatalogo.js      ← Lógica de carga/filtrado del catálogo extraída de Catalog.js
+        ├── context/CartContext.js    ← Estado global del carrito (persistido en localStorage)
+        ├── components/{PayPalCheckout, CartModal, ProductCard, ProtectedRoute}.js
+        └── pages/{Login, Register, Catalog, Admin, PagoExito, PagoCancelado}.js
 ```
+
+> **Nota:** el componente del modal de carrito se llama `CartModal.js` (no
+> `OrderModal.js` como decía esta sección antes). El carrito ya no vive solo
+> en `useState` local: se maneja en `CartContext` y se persiste en
+> `localStorage` para sobrevivir a un refresh de página.
 
 ---
 
@@ -286,26 +311,63 @@ Al hacer login, el frontend recibe un **JWT** válido por 24 horas y lo almacena
 | **ms-inventario** | http://localhost:8081 | API interna de productos |
 | **ms-pedidos** | http://localhost:8082 | API interna de pedidos |
 | **RabbitMQ UI** | http://localhost:15672 | Panel de mensajería (guest / guest) |
+| **Swagger UI (consolidado)** | http://localhost:8091 | Documentación interactiva de los 4 servicios (BFF, ms-auth, ms-inventario, ms-pedidos) |
+| **PostgreSQL auth** | localhost:5434 | BD `db_auth` |
 | **PostgreSQL inventario** | localhost:5432 | BD `db_inventario` |
 | **PostgreSQL pedidos** | localhost:5433 | BD `db_pedidos` |
 
 ### Endpoints principales del BFF (`:9090`)
 
 ```
-POST /api/auth/login              → Login → devuelve JWT
-GET  /api/auth/validate           → Verifica JWT (header Authorization)
-GET  /api/store/catalogo          → Lista productos del inventario
-POST /api/store/comprar           → Crea pedido (requiere JWT)
-POST /api/pagos/crear-orden       → Inicia orden PayPal
-POST /api/pagos/capturar-orden    → Captura pago y registra pedido
-POST /api/pagos/webhook           → Webhook PayPal (requiere HTTPS)
+POST   /api/auth/login                    → Login → devuelve JWT
+GET    /api/auth/validate                 → Verifica JWT (header Authorization)
+POST   /api/auth/registro                 → Registro público (sin token, siempre rol USER)
+GET    /api/store/catalogo                → Lista productos del inventario
+POST   /api/store/comprar                 → Crea pedido (requiere JWT)
+POST   /api/pagos/crear-orden             → Inicia orden PayPal
+POST   /api/pagos/capturar-orden          → Captura pago y registra pedido
+POST   /api/pagos/webhook                 → Webhook PayPal (requiere HTTPS)
+
+# Panel Admin (requiere JWT con rol ADMIN)
+POST   /api/admin/productos               → Crea producto
+PUT    /api/admin/productos/{sku}         → Actualiza producto
+DELETE /api/admin/productos/{sku}         → Elimina producto
+GET    /api/admin/pedidos                 → Lista todos los pedidos
+GET    /api/admin/usuarios                → Lista usuarios
+POST   /api/admin/usuarios                → Crea usuario
+PUT    /api/admin/usuarios/{id}           → Actualiza usuario
+DELETE /api/admin/usuarios/{id}           → Elimina usuario
 ```
 
 ### Endpoints de ms-auth (`:8083`)
 
 ```
-POST /api/auth/login              → Devuelve JWT si credenciales válidas
-GET  /api/auth/validate           → Valida JWT (usado por el BFF)
+POST   /api/auth/login              → Devuelve JWT si credenciales válidas
+GET    /api/auth/validate           → Valida JWT (usado por el BFF)
+GET    /api/auth/usuarios           → Lista todos los usuarios (sin password)
+POST   /api/auth/usuarios           → Crea un usuario nuevo
+POST   /api/auth/registro           → Registro público (siempre crea rol USER)
+PUT    /api/auth/usuarios/{id}      → Actualiza rol/estado/password
+DELETE /api/auth/usuarios/{id}      → Elimina un usuario
+```
+
+### Endpoints de ms-inventario (`:8081`)
+
+```
+GET    /api/inventario/productos                    → Lista productos
+GET    /api/inventario/productos/{sku}               → Detalle de un producto
+POST   /api/inventario/productos                     → Crea producto
+PUT    /api/inventario/productos/{sku}                → Actualiza producto
+DELETE /api/inventario/productos/{sku}                → Elimina producto
+PUT    /api/inventario/productos/{sku}/descontar-stock → Descuenta stock (usado por ms-pedidos)
+PUT    /api/inventario/productos/{sku}/revertir-stock  → Revierte stock (compensación de saga)
+```
+
+### Endpoints de ms-pedidos (`:8082`)
+
+```
+POST   /api/pedidos                 → Crea un pedido
+GET    /api/pedidos                 → Lista pedidos
 ```
 
 ---
@@ -425,9 +487,8 @@ El descuento de stock ocurre de forma **síncrona** vía Feign (garantiza consis
 
 ### ¿Por qué el carrito está en el frontend?
 
-El carrito es estado de sesión local que no necesita persistirse hasta el momento del pago. Mantenerlo en React con `useState` elimina una round-trip de red en cada interacción, reduce la complejidad del backend y da latencia cero al usuario.
+El carrito es estado de sesión local que no necesita persistirse en una BD hasta el momento del pago. Mantenerlo en `CartContext` (Context API) elimina una round-trip de red en cada interacción, reduce la complejidad del backend y da latencia cero al usuario. Se persiste en `localStorage` para que no se pierda si el usuario recarga la página antes de pagar.
 
 ### ¿Por qué JWT en ms-auth y no en el BFF?
 
 Separar la responsabilidad de autenticación en su propio microservicio permite escalar ms-auth independientemente, reemplazarlo (por OAuth2, Keycloak, etc.) sin tocar el BFF, y que cualquier microservicio futuro pueda validar tokens consultando el mismo servicio.
-
