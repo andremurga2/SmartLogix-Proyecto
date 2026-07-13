@@ -10,4 +10,5 @@ public interface ProductoService {
     ProductoDTO actualizarProducto(String sku, ProductoDTO productoDTO);
     void eliminarProducto(String sku);
     void actualizarStock(String sku, Integer cantidadComprada);
+    void revertirStock(String sku, Integer cantidadARevertir);
 }

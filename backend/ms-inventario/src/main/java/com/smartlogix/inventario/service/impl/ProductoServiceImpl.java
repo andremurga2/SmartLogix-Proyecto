@@ -56,7 +56,15 @@ public class ProductoServiceImpl implements ProductoService {
         producto.setImagenUrl(productoDTO.getImagenUrl()); // ← falta esta línea
         return productoFactory.toDTO(productoRepository.save(producto));
     }
-
+    @Override
+    @Transactional
+    public void revertirStock(String sku, Integer cantidadARevertir) {
+        Producto producto = productoRepository.findBySku(sku)
+                .orElseThrow(() -> new RuntimeException("Producto no encontrado con SKU: " + sku));
+        producto.setStockActual(producto.getStockActual() + cantidadARevertir);
+        productoRepository.save(producto);
+    }
+    
     @Override
     @Transactional
     public void eliminarProducto(String sku) {

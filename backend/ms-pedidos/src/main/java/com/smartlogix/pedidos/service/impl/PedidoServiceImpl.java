@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -45,28 +46,48 @@ public class PedidoServiceImpl implements PedidoService {
         Pedido pedido = pedidoFactory.toEntity(pedidoDTO);
         BigDecimal totalPedido = BigDecimal.ZERO;
 
-        // 1. Validar y descontar stock de CADA ítem (síncrono, dentro de la misma transacción).
-        //    Si cualquier ítem falla, @Transactional hace rollback de todo el pedido,
-        //    pero el stock ya descontado en ms-inventario para ítems previos en este
-        //    loop NO se revierte automáticamente (ver nota más abajo).
-        for (PedidoItemDTO itemDTO : pedidoDTO.getItems()) {
-            ProductoResponse producto = inventarioClient.obtenerProducto(itemDTO.getSkuProducto());
+        // Registro de compensación tipo Saga: cada ítem cuyo stock ya fue
+        // descontado en ms-inventario se guarda aquí. Si un ítem posterior
+        // falla, se revierte (evento StockRevertido) todo lo ya descontado
+        // antes de relanzar la excepción, evitando que ms-inventario quede
+        // con stock descontado para un pedido que nunca se persistió.
+        List<PedidoItemDTO> itemsConfirmados = new ArrayList<>();
 
-            if (producto.getStockActual() < itemDTO.getCantidad()) {
-                throw new RuntimeException(
-                        "Stock insuficiente para " + itemDTO.getSkuProducto() +
-                        " (disponible: " + producto.getStockActual() + ", solicitado: " + itemDTO.getCantidad() + ")");
+        try {
+            for (PedidoItemDTO itemDTO : pedidoDTO.getItems()) {
+                ProductoResponse producto = inventarioClient.obtenerProducto(itemDTO.getSkuProducto());
+
+                if (producto.getStockActual() < itemDTO.getCantidad()) {
+                    throw new RuntimeException(
+                            "Stock insuficiente para " + itemDTO.getSkuProducto() +
+                            " (disponible: " + producto.getStockActual() + ", solicitado: " + itemDTO.getCantidad() + ")");
+                }
+
+                inventarioClient.descontarStock(itemDTO.getSkuProducto(), itemDTO.getCantidad());
+                itemsConfirmados.add(itemDTO);
+
+                BigDecimal subtotal = producto.getPrecio().multiply(BigDecimal.valueOf(itemDTO.getCantidad()));
+                totalPedido = totalPedido.add(subtotal);
+
+                PedidoItem itemEntity = pedidoFactory.toItemEntity(itemDTO);
+                itemEntity.setPrecioUnitario(producto.getPrecio());
+                itemEntity.setSubtotal(subtotal);
+                pedido.addItem(itemEntity);
             }
-
-            inventarioClient.descontarStock(itemDTO.getSkuProducto(), itemDTO.getCantidad());
-
-            BigDecimal subtotal = producto.getPrecio().multiply(BigDecimal.valueOf(itemDTO.getCantidad()));
-            totalPedido = totalPedido.add(subtotal);
-
-            PedidoItem itemEntity = pedidoFactory.toItemEntity(itemDTO);
-            itemEntity.setPrecioUnitario(producto.getPrecio());
-            itemEntity.setSubtotal(subtotal);
-            pedido.addItem(itemEntity);
+        } catch (RuntimeException ex) {
+            log.warn("Fallo creando pedido, revirtiendo stock de {} ítem(s) ya descontado(s): {}",
+                    itemsConfirmados.size(), ex.getMessage());
+            for (PedidoItemDTO confirmado : itemsConfirmados) {
+                try {
+                    inventarioClient.revertirStock(confirmado.getSkuProducto(), confirmado.getCantidad());
+                } catch (Exception revertEx) {
+                    // Si incluso la reversión falla (ms-inventario caído), lo dejamos
+                    // registrado para reconciliación manual/job en vez de perder el evento.
+                    log.error("No se pudo revertir stock de {} tras fallo de pedido: {}",
+                            confirmado.getSkuProducto(), revertEx.getMessage());
+                }
+            }
+            throw ex;
         }
 
         // 2. Guardar pedido + items (cascade ALL los persiste juntos)
