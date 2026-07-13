@@ -48,10 +48,12 @@ public class PedidoServiceImpl implements PedidoService {
 
         // Registro de compensación tipo Saga: cada ítem cuyo stock ya fue
         // descontado en ms-inventario se guarda aquí. Si un ítem posterior
-        // falla, se revierte (evento StockRevertido) todo lo ya descontado
-        // antes de relanzar la excepción, evitando que ms-inventario quede
-        // con stock descontado para un pedido que nunca se persistió.
+        // falla, o si falla el guardado del pedido en base de datos, se
+        // revierte todo lo ya descontado antes de relanzar la excepción,
+        // evitando que ms-inventario quede con stock descontado para un
+        // pedido que nunca se persistió.
         List<PedidoItemDTO> itemsConfirmados = new ArrayList<>();
+        Pedido guardado;
 
         try {
             for (PedidoItemDTO itemDTO : pedidoDTO.getItems()) {
@@ -74,6 +76,17 @@ public class PedidoServiceImpl implements PedidoService {
                 itemEntity.setSubtotal(subtotal);
                 pedido.addItem(itemEntity);
             }
+
+            // 2. Guardar pedido + items (cascade ALL los persiste juntos).
+            // Se hace dentro del mismo try para que un fallo aquí (p. ej.
+            // constraint de BD, conexión caída) también dispare la
+            // compensación de stock: ya se descontó en ms-inventario pero
+            // el pedido nunca quedará persistido.
+            pedido.setPrecioTotal(totalPedido);
+            pedido.setEstado("COMPLETADO");
+            pedido.setPaypalOrderId(pedidoDTO.getPaypalOrderId());
+
+            guardado = pedidoRepository.save(pedido);
         } catch (RuntimeException ex) {
             log.warn("Fallo creando pedido, revirtiendo stock de {} ítem(s) ya descontado(s): {}",
                     itemsConfirmados.size(), ex.getMessage());
@@ -89,13 +102,6 @@ public class PedidoServiceImpl implements PedidoService {
             }
             throw ex;
         }
-
-        // 2. Guardar pedido + items (cascade ALL los persiste juntos)
-        pedido.setPrecioTotal(totalPedido);
-        pedido.setEstado("COMPLETADO");
-        pedido.setPaypalOrderId(pedidoDTO.getPaypalOrderId());
-
-        Pedido guardado = pedidoRepository.save(pedido);
 
         // 3. Publicar un evento por cada ítem (mantiene compatibilidad con el listener actual)
         for (PedidoItem item : guardado.getItems()) {

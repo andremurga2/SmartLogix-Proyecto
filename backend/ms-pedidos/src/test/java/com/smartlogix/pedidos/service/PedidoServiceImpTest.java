@@ -158,6 +158,103 @@ class PedidoServiceImplTest {
         verify(pedidoRepository, never()).save(any());
     }
 
+    // ── COMPENSACIÓN (SAGA) — falla el guardado del pedido ─────────────────────
+
+    @Test
+    void debeRevertirStockConSkuYCantidadCorrectosCuandoFallaElGuardadoDelPedido() {
+        // Arrange: el stock se descuenta sin problema, pero persistir el pedido falla
+        // (p. ej. constraint de BD, conexión caída con PostgreSQL).
+        PedidoItem itemEntity = new PedidoItem();
+        itemEntity.setSkuProducto("SKU-001");
+        itemEntity.setCantidad(2);
+
+        RuntimeException errorDeGuardado = new RuntimeException("Fallo de conexión con la base de datos");
+
+        when(pedidoFactory.toEntity(pedidoDTO)).thenReturn(pedidoEntity);
+        when(pedidoFactory.toItemEntity(itemDTO)).thenReturn(itemEntity);
+        when(inventarioClient.obtenerProducto("SKU-001")).thenReturn(productoResponse);
+        when(pedidoRepository.save(any(Pedido.class))).thenThrow(errorDeGuardado);
+
+        // Act & Assert
+        RuntimeException excepcionLanzada = assertThrows(RuntimeException.class,
+                () -> pedidoService.crearPedido(pedidoDTO));
+        assertSame(errorDeGuardado, excepcionLanzada);
+
+        // El stock ya se había descontado antes de intentar guardar
+        verify(inventarioClient, times(1)).descontarStock("SKU-001", 2);
+
+        // La compensación debe revertir exactamente el SKU y la cantidad descontados
+        ArgumentCaptor<String> skuCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Integer> cantidadCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(inventarioClient, times(1)).revertirStock(skuCaptor.capture(), cantidadCaptor.capture());
+        assertEquals("SKU-001", skuCaptor.getValue());
+        assertEquals(2, cantidadCaptor.getValue());
+
+        // No se debe publicar ningún evento de pedido creado si el guardado falló
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void debeRevertirStockDeTodosLosItemsConfirmadosCuandoFallaElGuardadoConMultiplesItems() {
+        // Arrange: dos ítems logran descontar stock, pero el guardado final del pedido falla.
+        PedidoItemDTO item2 = new PedidoItemDTO();
+        item2.setSkuProducto("SKU-002");
+        item2.setCantidad(3);
+        pedidoDTO.setItems(List.of(itemDTO, item2));
+
+        PedidoItem itemEntity1 = new PedidoItem();
+        itemEntity1.setSkuProducto("SKU-001");
+        itemEntity1.setCantidad(2);
+
+        PedidoItem itemEntity2 = new PedidoItem();
+        itemEntity2.setSkuProducto("SKU-002");
+        itemEntity2.setCantidad(3);
+
+        ProductoResponse producto2 = new ProductoResponse();
+        producto2.setSku("SKU-002");
+        producto2.setPrecio(new BigDecimal("100.00"));
+        producto2.setStockActual(10);
+
+        when(pedidoFactory.toEntity(pedidoDTO)).thenReturn(pedidoEntity);
+        when(pedidoFactory.toItemEntity(itemDTO)).thenReturn(itemEntity1);
+        when(pedidoFactory.toItemEntity(item2)).thenReturn(itemEntity2);
+        when(inventarioClient.obtenerProducto("SKU-001")).thenReturn(productoResponse);
+        when(inventarioClient.obtenerProducto("SKU-002")).thenReturn(producto2);
+        when(pedidoRepository.save(any(Pedido.class)))
+                .thenThrow(new RuntimeException("Violación de constraint en BD"));
+
+        assertThrows(RuntimeException.class, () -> pedidoService.crearPedido(pedidoDTO));
+
+        verify(inventarioClient, times(1)).revertirStock("SKU-001", 2);
+        verify(inventarioClient, times(1)).revertirStock("SKU-002", 3);
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void noDebeInterrumpirLaCompensacionSiLaReversionDeUnItemFalla() {
+        // Arrange: revertirStock también falla (ms-inventario caído). El servicio debe
+        // igual relanzar la excepción original de guardado, sin quedar la reversión
+        // silenciosamente perdida (queda registrada en logs para reconciliación).
+        PedidoItem itemEntity = new PedidoItem();
+        itemEntity.setSkuProducto("SKU-001");
+        itemEntity.setCantidad(2);
+
+        RuntimeException errorDeGuardado = new RuntimeException("Timeout guardando pedido");
+
+        when(pedidoFactory.toEntity(pedidoDTO)).thenReturn(pedidoEntity);
+        when(pedidoFactory.toItemEntity(itemDTO)).thenReturn(itemEntity);
+        when(inventarioClient.obtenerProducto("SKU-001")).thenReturn(productoResponse);
+        when(pedidoRepository.save(any(Pedido.class))).thenThrow(errorDeGuardado);
+        doThrow(new RuntimeException("ms-inventario no disponible"))
+                .when(inventarioClient).revertirStock("SKU-001", 2);
+
+        RuntimeException excepcionLanzada = assertThrows(RuntimeException.class,
+                () -> pedidoService.crearPedido(pedidoDTO));
+
+        assertSame(errorDeGuardado, excepcionLanzada);
+        verify(inventarioClient, times(1)).revertirStock("SKU-001", 2);
+    }
+
     // ── VALIDACIONES ──────────────────────────────────────────────────────────
 
     @Test
