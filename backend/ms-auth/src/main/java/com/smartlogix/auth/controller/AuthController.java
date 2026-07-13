@@ -4,6 +4,11 @@ import com.smartlogix.auth.model.LoginRequest;
 import com.smartlogix.auth.model.LoginResponse;
 import com.smartlogix.auth.model.ValidateResponse;
 import com.smartlogix.auth.service.AuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,14 +19,20 @@ import java.util.List;
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = "*")
 @RequiredArgsConstructor
+@Tag(name = "Autenticación", description = "Login, validación de JWT y gestión de usuarios")
 public class AuthController {
 
     private final AuthService authService;
 
-    /**
-     * POST /api/auth/login
-     * Recibe credenciales y devuelve un JWT si son válidas.
-     */
+    @Operation(
+            summary = "Iniciar sesión",
+            description = "Valida las credenciales del usuario y, si son correctas, devuelve un JWT " +
+                    "firmado que debe enviarse en el header Authorization de las siguientes peticiones."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Login exitoso, token generado"),
+            @ApiResponse(responseCode = "401", description = "Usuario o contraseña incorrectos")
+    })
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
         LoginResponse response = authService.login(request.getUsername(), request.getPassword());
@@ -30,26 +41,44 @@ public class AuthController {
                 : ResponseEntity.status(401).body(response);
     }
 
-    /**
-     * GET /api/auth/validate
-     * Verifica el JWT enviado en el header Authorization: Bearer <token>.
-     * El BFF llama a este endpoint antes de enrutar peticiones protegidas.
-     */
+    @Operation(
+            summary = "Validar JWT",
+            description = "Verifica que el token recibido en el header Authorization (formato 'Bearer <token>') " +
+                    "sea válido y no haya expirado. El BFF llama a este endpoint antes de enrutar peticiones protegidas."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Token válido"),
+            @ApiResponse(responseCode = "401", description = "Token ausente, inválido o expirado")
+    })
     @GetMapping("/validate")
     public ResponseEntity<ValidateResponse> validate(
+            @Parameter(description = "Header Authorization con formato 'Bearer <token>'")
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         ValidateResponse response = authService.validate(authHeader);
         return response.isValid()
                 ? ResponseEntity.ok(response)
                 : ResponseEntity.status(401).body(response);
     }
-    /** GET /api/auth/usuarios — lista todos los usuarios (sin password) */
+
+    @Operation(
+            summary = "Listar usuarios",
+            description = "Devuelve todos los usuarios registrados, sin exponer el campo de contraseña. Uso administrativo."
+    )
+    @ApiResponse(responseCode = "200", description = "Listado de usuarios")
     @GetMapping("/usuarios")
     public ResponseEntity<List<UsuarioDTO>> listarUsuarios() {
         return ResponseEntity.ok(authService.listarUsuarios());
     }
 
-    /** POST /api/auth/usuarios — crea un usuario nuevo */
+    @Operation(
+            summary = "Crear usuario (admin)",
+            description = "Crea un usuario nuevo con el rol indicado en el DTO. A diferencia de /registro, " +
+                    "permite definir el rol directamente."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Usuario creado"),
+            @ApiResponse(responseCode = "400", description = "Datos inválidos (ej. username ya existe)")
+    })
     @PostMapping("/usuarios")
     public ResponseEntity<?> crearUsuario(@RequestBody UsuarioDTO dto) {
         try {
@@ -59,7 +88,15 @@ public class AuthController {
         }
     }
 
-    /** POST /api/auth/registro — registro público, siempre crea rol USER */
+    @Operation(
+            summary = "Registro público",
+            description = "Permite a cualquier visitante crear una cuenta propia. El rol siempre se fuerza a " +
+                    "USER, sin importar lo que venga en el body, para evitar auto-asignación de privilegios."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Usuario registrado"),
+            @ApiResponse(responseCode = "400", description = "Datos inválidos (ej. username ya existe)")
+    })
     @PostMapping("/registro")
     public ResponseEntity<?> registrarUsuario(@RequestBody UsuarioDTO dto) {
         try {
@@ -69,7 +106,14 @@ public class AuthController {
         }
     }
 
-    /** PUT /api/auth/usuarios/{id} — actualiza rol/estado/password */
+    @Operation(
+            summary = "Actualizar usuario",
+            description = "Actualiza rol, estado o contraseña de un usuario existente, identificado por id."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Usuario actualizado"),
+            @ApiResponse(responseCode = "400", description = "Datos inválidos o usuario inexistente")
+    })
     @PutMapping("/usuarios/{id}")
     public ResponseEntity<?> actualizarUsuario(@PathVariable Long id, @RequestBody UsuarioDTO dto) {
         try {
@@ -79,7 +123,14 @@ public class AuthController {
         }
     }
 
-    /** DELETE /api/auth/usuarios/{id} — elimina un usuario */
+    @Operation(
+            summary = "Eliminar usuario",
+            description = "Elimina definitivamente un usuario por id."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Usuario eliminado"),
+            @ApiResponse(responseCode = "400", description = "Usuario inexistente")
+    })
     @DeleteMapping("/usuarios/{id}")
     public ResponseEntity<?> eliminarUsuario(@PathVariable Long id) {
         try {

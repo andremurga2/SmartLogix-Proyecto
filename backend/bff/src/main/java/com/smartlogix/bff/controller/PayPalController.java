@@ -4,6 +4,11 @@ import com.paypal.orders.Order;
 import com.smartlogix.bff.model.*;
 import com.smartlogix.bff.service.BffService;
 import com.smartlogix.bff.service.PayPalService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -18,15 +23,22 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/pagos")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
+@Tag(name = "Pagos (PayPal)", description = "Flujo de checkout en dos pasos con PayPal sandbox: crear orden y capturar pago")
 public class PayPalController {
 
     private final PayPalService payPalService;
     private final BffService bffService;
 
-    /**
-     * PASO 1 — Crea la orden en PayPal con el desglose del carrito completo
-     * y devuelve la URL de aprobación del usuario.
-     */
+    @Operation(
+            summary = "Crear orden PayPal (paso 1)",
+            description = "Crea la orden en PayPal con el desglose completo del carrito y devuelve la URL de " +
+                    "aprobación a la que debe redirigirse al usuario."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Orden creada, URL de aprobación disponible"),
+            @ApiResponse(responseCode = "400", description = "Carrito o moneda inválidos"),
+            @ApiResponse(responseCode = "500", description = "Error de comunicación con la API de PayPal")
+    })
     @PostMapping("/crear-orden")
     public ResponseEntity<CrearOrdenResponse> crearOrden(@RequestBody CrearOrdenRequest request) {
         try {
@@ -53,10 +65,17 @@ public class PayPalController {
         }
     }
 
-    /**
-     * PASO 2 — Captura el pago de una orden ya aprobada por el usuario en PayPal
-     * y, si el pago fue exitoso (COMPLETED), registra el pedido (con todos sus ítems) en ms-pedidos.
-     */
+    @Operation(
+            summary = "Capturar orden PayPal (paso 2)",
+            description = "Captura el pago de una orden ya aprobada por el usuario en PayPal. Si el estado " +
+                    "devuelto es COMPLETED, registra el pedido con todos sus ítems en ms-pedidos; si no, no " +
+                    "se crea ningún pedido."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Pago capturado y pedido registrado"),
+            @ApiResponse(responseCode = "400", description = "El pago no fue completado (estado distinto de COMPLETED)"),
+            @ApiResponse(responseCode = "500", description = "Error al comunicarse con la API de PayPal")
+    })
     @PostMapping("/capturar-orden")
     public ResponseEntity<PagoResponse> capturarOrden(@RequestBody CapturarOrdenRequest request) {
         try {
@@ -108,12 +127,15 @@ public class PayPalController {
         }
     }
 
-    /**
-     * WEBHOOK — PayPal notifica eventos (PAYMENT.CAPTURE.COMPLETED, etc.)
-     * Requiere URL pública HTTPS → usar ngrok en desarrollo.
-     */
+    @Operation(
+            summary = "Webhook de PayPal",
+            description = "Recibe notificaciones asíncronas de eventos de PayPal (ej. PAYMENT.CAPTURE.COMPLETED). " +
+                    "Requiere una URL pública HTTPS accesible por PayPal — en desarrollo se usa un túnel como ngrok."
+    )
+    @ApiResponse(responseCode = "200", description = "Evento recibido y registrado en log")
     @PostMapping("/webhook")
     public ResponseEntity<Void> recibirWebhook(
+            @Parameter(description = "Id de transmisión enviado por PayPal para trazabilidad del evento")
             @RequestHeader(value = "Paypal-Transmission-Id", required = false) String transmissionId,
             @RequestBody String payload) {
 
