@@ -14,17 +14,17 @@ public interface AuthClient {
     ValidateResponse validate(@RequestHeader("Authorization") String bearerToken);
 
     @GetMapping("/api/auth/usuarios")
-    List<UsuarioDTO> listarUsuarios();
+    List<UsuarioDTO> listarUsuarios(@RequestHeader("Authorization") String bearerToken);
 
     @PostMapping("/api/auth/registro")
     UsuarioDTO registrarUsuario(@RequestBody UsuarioDTO dto);
 
     @PostMapping("/api/auth/usuarios")
-    UsuarioDTO crearUsuario(@RequestBody UsuarioDTO dto);
+    UsuarioDTO crearUsuario(@RequestHeader("Authorization") String bearerToken, @RequestBody UsuarioDTO dto);
 
     @PutMapping("/api/auth/usuarios/{id}")
-    UsuarioDTO actualizarUsuario(@PathVariable("id") Long id, @RequestBody UsuarioDTO dto);
+    UsuarioDTO actualizarUsuario(@RequestHeader("Authorization") String bearerToken, @PathVariable("id") Long id, @RequestBody UsuarioDTO dto);
 
     @DeleteMapping("/api/auth/usuarios/{id}")
-    void eliminarUsuario(@PathVariable("id") Long id);
+    void eliminarUsuario(@RequestHeader("Authorization") String bearerToken, @PathVariable("id") Long id);
 }

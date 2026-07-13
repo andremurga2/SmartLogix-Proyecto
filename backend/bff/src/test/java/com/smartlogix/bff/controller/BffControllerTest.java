@@ -239,11 +239,13 @@ class BffControllerTest {
     }
 
     // ── ADMIN: USUARIOS ───────────────────────────────────────────────────────
+    // Estos mocks ahora incluyen "Bearer admin" como primer argumento porque
+    // BffService reenvía el header Authorization hacia ms-auth (ver punto 3).
 
     @Test
     void listarUsuariosDebeRetornar200ConAdminToken() {
         when(authClient.validate("Bearer admin")).thenReturn(validAdmin);
-        when(bffService.listarUsuarios()).thenReturn(List.of(new UsuarioDTO()));
+        when(bffService.listarUsuarios("Bearer admin")).thenReturn(List.of(new UsuarioDTO()));
 
         ResponseEntity<?> response = bffController.listarUsuarios("Bearer admin");
 
@@ -251,10 +253,20 @@ class BffControllerTest {
     }
 
     @Test
+    void listarUsuariosDebeRetornar403SinAdmin() {
+        when(authClient.validate("Bearer user")).thenReturn(validUser);
+
+        ResponseEntity<?> response = bffController.listarUsuarios("Bearer user");
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        verifyNoInteractions(bffService);
+    }
+
+    @Test
     void crearUsuarioAdminDebeRetornar200() {
         when(authClient.validate("Bearer admin")).thenReturn(validAdmin);
         UsuarioDTO dto = new UsuarioDTO();
-        when(bffService.crearUsuario(dto)).thenReturn(dto);
+        when(bffService.crearUsuario("Bearer admin", dto)).thenReturn(dto);
 
         ResponseEntity<?> response = bffController.crearUsuario("Bearer admin", dto);
 
@@ -265,7 +277,7 @@ class BffControllerTest {
     void actualizarUsuarioAdminDebeRetornar200() {
         when(authClient.validate("Bearer admin")).thenReturn(validAdmin);
         UsuarioDTO dto = new UsuarioDTO();
-        when(bffService.actualizarUsuario(1L, dto)).thenReturn(dto);
+        when(bffService.actualizarUsuario("Bearer admin", 1L, dto)).thenReturn(dto);
 
         ResponseEntity<?> response = bffController.actualizarUsuario("Bearer admin", 1L, dto);
 
@@ -275,7 +287,7 @@ class BffControllerTest {
     @Test
     void eliminarUsuarioAdminDebeRetornar204() {
         when(authClient.validate("Bearer admin")).thenReturn(validAdmin);
-        doNothing().when(bffService).eliminarUsuario(1L);
+        doNothing().when(bffService).eliminarUsuario("Bearer admin", 1L);
 
         ResponseEntity<?> response = bffController.eliminarUsuario("Bearer admin", 1L);
 

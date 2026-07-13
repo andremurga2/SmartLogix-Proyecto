@@ -118,11 +118,15 @@ public class BffController {
         return ResponseEntity.ok(bffService.listarPedidos());
     }
 
+    // ── Admin: Usuarios ────────────────────────────────────────────────────────
+    // Estos 4 endpoints ahora reenvían el JWT hacia ms-auth (authHeader),
+    // que a partir del punto 3 valida el token él mismo en vez de confiar
+    // ciegamente en que el BFF ya filtró.
     @GetMapping("/admin/usuarios")
     public ResponseEntity<?> listarUsuarios(
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         if (!isAdminToken(authHeader)) return ResponseEntity.status(403).body("Acceso denegado.");
-        return ResponseEntity.ok(bffService.listarUsuarios());
+        return ResponseEntity.ok(bffService.listarUsuarios(authHeader));
     }
 
     @PostMapping("/admin/usuarios")
@@ -130,7 +134,7 @@ public class BffController {
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestBody UsuarioDTO usuarioDTO) {
         if (!isAdminToken(authHeader)) return ResponseEntity.status(403).body("Acceso denegado.");
-        return ResponseEntity.ok(bffService.crearUsuario(usuarioDTO));
+        return ResponseEntity.ok(bffService.crearUsuario(authHeader, usuarioDTO));
     }
 
     @PutMapping("/admin/usuarios/{id}")
@@ -139,7 +143,7 @@ public class BffController {
             @PathVariable Long id,
             @RequestBody UsuarioDTO usuarioDTO) {
         if (!isAdminToken(authHeader)) return ResponseEntity.status(403).body("Acceso denegado.");
-        return ResponseEntity.ok(bffService.actualizarUsuario(id, usuarioDTO));
+        return ResponseEntity.ok(bffService.actualizarUsuario(authHeader, id, usuarioDTO));
     }
 
     @DeleteMapping("/admin/usuarios/{id}")
@@ -147,9 +151,10 @@ public class BffController {
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @PathVariable Long id) {
         if (!isAdminToken(authHeader)) return ResponseEntity.status(403).body("Acceso denegado.");
-        bffService.eliminarUsuario(id);
+        bffService.eliminarUsuario(authHeader, id);
         return ResponseEntity.noContent().build();
     }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
     private boolean isTokenValid(String authHeader) {
         if (authHeader == null || authHeader.isBlank()) return false;

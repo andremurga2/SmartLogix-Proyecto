@@ -46,23 +46,25 @@ public class BffService {
     }
 
     // ── Admin: Usuarios ───────────────────────────────────────────────────────
+    // Estos endpoints ahora reenvían el JWT hacia ms-auth, que a partir del
+    // punto 3 valida el token él mismo en vez de confiar ciegamente en el BFF.
     public UsuarioDTO registrarUsuario(UsuarioDTO dto) {
         return authClient.registrarUsuario(dto);
     }
-    
-    public List<UsuarioDTO> listarUsuarios() {
-        return authClient.listarUsuarios();
+
+    public List<UsuarioDTO> listarUsuarios(String authHeader) {
+        return authClient.listarUsuarios(authHeader);
     }
 
-    public UsuarioDTO crearUsuario(UsuarioDTO dto) {
-        return authClient.crearUsuario(dto);
+    public UsuarioDTO crearUsuario(String authHeader, UsuarioDTO dto) {
+        return authClient.crearUsuario(authHeader, dto);
     }
 
-    public UsuarioDTO actualizarUsuario(Long id, UsuarioDTO dto) {
-        return authClient.actualizarUsuario(id, dto);
+    public UsuarioDTO actualizarUsuario(String authHeader, Long id, UsuarioDTO dto) {
+        return authClient.actualizarUsuario(authHeader, id, dto);
     }
 
-    public void eliminarUsuario(Long id) {
-        authClient.eliminarUsuario(id);
+    public void eliminarUsuario(String authHeader, Long id) {
+        authClient.eliminarUsuario(authHeader, id);
     }
 }
