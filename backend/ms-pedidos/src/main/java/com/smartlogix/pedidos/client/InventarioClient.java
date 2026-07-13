@@ -14,4 +14,7 @@ public interface InventarioClient {
 
     @PutMapping("/api/inventario/productos/{sku}/descontar-stock")
     void descontarStock(@PathVariable("sku") String sku, @RequestParam("cantidad") Integer cantidad);
+
+    @PutMapping("/api/inventario/productos/{sku}/revertir-stock")
+    void revertirStock(@PathVariable("sku") String sku, @RequestParam("cantidad") Integer cantidad);
 }

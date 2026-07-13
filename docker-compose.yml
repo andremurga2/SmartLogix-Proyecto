@@ -92,7 +92,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-auth:5432/db_auth
       - SPRING_DATASOURCE_USERNAME=admin
       - SPRING_DATASOURCE_PASSWORD=admin_password
-      - JWT_SECRET=${JWT_SECRET:-SmartLogix2026-SuperSecretKey-MustBe256BitsOrMoreForHS256}
+      - JWT_SECRET=${JWT_SECRET:?Debes definir JWT_SECRET en tu .env antes de levantar el stack}
       - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS:-86400000}
     depends_on:
       db-auth:

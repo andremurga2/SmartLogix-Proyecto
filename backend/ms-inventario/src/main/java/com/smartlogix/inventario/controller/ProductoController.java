@@ -50,4 +50,10 @@ public class ProductoController {
         productoService.actualizarStock(sku, cantidad);
         return ResponseEntity.noContent().build();
     }
+    
+    @PutMapping("/{sku}/revertir-stock")
+    public ResponseEntity<Void> revertirStock(@PathVariable String sku, @RequestParam Integer cantidad) {
+        productoService.revertirStock(sku, cantidad);
+        return ResponseEntity.noContent().build();
+    }
 }
