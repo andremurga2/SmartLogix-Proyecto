@@ -1,5 +1,7 @@
 package com.smartlogix.bff.client;
 
+import com.smartlogix.bff.model.LoginRequest;
+import com.smartlogix.bff.model.LoginResponse;
 import com.smartlogix.bff.model.UsuarioDTO;
 import com.smartlogix.bff.model.ValidateResponse;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -9,6 +11,9 @@ import java.util.List;
 
 @FeignClient(name = "ms-auth", url = "${smartlogix.auth.url}")
 public interface AuthClient {
+
+    @PostMapping("/api/auth/login")
+    LoginResponse login(@RequestBody LoginRequest loginRequest);
 
     @GetMapping("/api/auth/validate")
     ValidateResponse validate(@RequestHeader("Authorization") String bearerToken);

@@ -93,6 +93,46 @@ class BffControllerTest {
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
     }
 
+    // ── LOGIN ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void loginDebeRetornar200ConCredencialesValidas() {
+        LoginRequest req = new LoginRequest("admin", "admin123");
+        LoginResponse ok = new LoginResponse(true, "Login exitoso", "jwt-token", "admin", "ADMIN");
+        when(authClient.login(req)).thenReturn(ok);
+
+        ResponseEntity<LoginResponse> response = bffController.login(req);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().isSuccess());
+        assertEquals("jwt-token", response.getBody().getToken());
+    }
+
+    @Test
+    void loginDebeRetornar401ConCredencialesInvalidas() {
+        LoginRequest req = new LoginRequest("admin", "wrong");
+        FeignException.Unauthorized ex = mock(FeignException.Unauthorized.class);
+        when(authClient.login(req)).thenThrow(ex);
+
+        ResponseEntity<LoginResponse> response = bffController.login(req);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertFalse(response.getBody().isSuccess());
+        assertEquals("Usuario o contraseña inválidos", response.getBody().getMessage());
+    }
+
+    @Test
+    void loginDebeRetornar503SiMsAuthNoResponde() {
+        LoginRequest req = new LoginRequest("admin", "admin123");
+        when(authClient.login(req)).thenThrow(new RuntimeException("connection refused"));
+
+        ResponseEntity<LoginResponse> response = bffController.login(req);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertFalse(response.getBody().isSuccess());
+        assertEquals("Servicio de autenticación no disponible", response.getBody().getMessage());
+    }
+
     // ── VALIDATE ─────────────────────────────────────────────────────────────
 
     @Test

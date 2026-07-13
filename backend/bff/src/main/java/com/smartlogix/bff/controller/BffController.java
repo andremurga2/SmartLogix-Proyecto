@@ -41,13 +41,9 @@ public class BffController {
     @PostMapping("/auth/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest loginRequest) {
         try {
-            org.springframework.web.client.RestTemplate rt = new org.springframework.web.client.RestTemplate();
-            String authUrl = System.getenv().getOrDefault("AUTH_SERVICE_URL", "http://localhost:8083");
-            LoginResponse response = rt.postForObject(
-                    authUrl + "/api/auth/login", loginRequest, LoginResponse.class);
-            if (response != null && response.isSuccess()) {
-                return ResponseEntity.ok(response);
-            }
+            LoginResponse response = authClient.login(loginRequest);
+            return ResponseEntity.ok(response);
+        } catch (FeignException.Unauthorized e) {
             return ResponseEntity.status(401).body(
                     new LoginResponse(false, "Usuario o contraseña inválidos", null, null, null));
         } catch (Exception e) {
