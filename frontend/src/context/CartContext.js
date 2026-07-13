@@ -1,9 +1,28 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 const CartContext = createContext(null);
+const STORAGE_KEY = 'smartlogix_cart';
+
+const cargarCarritoInicial = () => {
+  try {
+    const guardado = localStorage.getItem(STORAGE_KEY);
+    return guardado ? JSON.parse(guardado) : [];
+  } catch {
+    return [];
+  }
+};
 
 export const CartProvider = ({ children }) => {
-  const [items, setItems] = useState([]); // [{ sku, nombre, precio, cantidad, stockActual }]
+  const [items, setItems] = useState(cargarCarritoInicial); // [{ sku, nombre, precio, cantidad, stockActual }]
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    } catch {
+      // localStorage lleno o deshabilitado: el carrito sigue funcionando
+      // en memoria para esta sesión, solo no persiste al refrescar.
+    }
+  }, [items]);
 
   const agregarItem = useCallback((producto, cantidad = 1) => {
     setItems(prev => {

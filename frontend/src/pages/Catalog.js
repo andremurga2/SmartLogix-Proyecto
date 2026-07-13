@@ -1,41 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import ProductCard from '../components/ProductCard';
 import CartModal from '../components/CartModal';
-import { api } from '../services/api';
 import { useCart } from '../context/CartContext';
-
-const PRODUCTOS_POR_PAGINA = 8;
+import { useCatalogo } from '../hooks/useCatalogo';
 
 const Catalog = () => {
-  const [productos, setProductos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const {
+    productos, productosFiltrados, productosPagina,
+    loading, error, fetchCatalogo,
+    busqueda, setBusqueda,
+    soloDisponibles, setSoloDisponibles,
+    paginaActual, totalPaginas, cambiarPagina,
+  } = useCatalogo();
 
   const [showCart, setShowCart] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
-  const [busqueda, setBusqueda] = useState('');
-  const [soloDisponibles, setSoloDisponibles] = useState(false);
-  const [paginaActual, setPaginaActual] = useState(1);
-
   const { cantidadTotal } = useCart();
-
-  const fetchCatalogo = async () => {
-    try {
-      setLoading(true);
-      const data = await api.getCatalogo();
-      setProductos(data);
-      setError(null);
-    } catch (err) {
-      setError('No se pudo cargar el catálogo. Verifique si el BFF está ejecutándose.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchCatalogo();
-  }, []);
 
   const handlePurchaseSuccess = (response) => {
     setShowCart(false);
@@ -43,27 +24,6 @@ const Catalog = () => {
     fetchCatalogo();
     setTimeout(() => setSuccessMsg(''), 5000);
   };
-
-  const productosFiltrados = productos.filter(p => {
-    const termino = busqueda.toLowerCase();
-    const coincide = p.nombre.toLowerCase().includes(termino) || p.sku.toLowerCase().includes(termino);
-    const disponible = soloDisponibles ? p.disponible && p.stockActual > 0 : true;
-    return coincide && disponible;
-  });
-
-  const totalPaginas = Math.ceil(productosFiltrados.length / PRODUCTOS_POR_PAGINA);
-  const inicio = (paginaActual - 1) * PRODUCTOS_POR_PAGINA;
-  const productosPagina = productosFiltrados.slice(inicio, inicio + PRODUCTOS_POR_PAGINA);
-
-  const cambiarPagina = (pagina) => {
-    setPaginaActual(pagina);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Resetear página al cambiar filtros
-  useEffect(() => {
-    setPaginaActual(1);
-  }, [busqueda, soloDisponibles]);
 
   return (
     <div>
